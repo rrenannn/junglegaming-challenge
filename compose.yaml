@@ -1,0 +1,99 @@
+name: jungle-gaming
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres-local-password
+      POSTGRES_DB: postgres
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./deploy/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.3.3
+    command: start-dev --import-realm --health-enabled=true
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: "${KEYCLOAK_ADMIN:-admin}"
+      KC_BOOTSTRAP_ADMIN_PASSWORD: "${KEYCLOAK_ADMIN_PASSWORD:-admin-local-password}"
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: keycloak_app
+      KC_DB_PASSWORD: keycloak-local-password
+    ports:
+      - "${KEYCLOAK_PORT:-8081}:8080"
+    volumes:
+      - ./deploy/keycloak/realm-jungle-gaming.json:/opt/keycloak/data/import/realm-jungle-gaming.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  localstack:
+    image: localstack/localstack:4.8.1
+    environment:
+      SERVICES: sqs
+      AWS_DEFAULT_REGION: "${AWS_REGION:-us-east-1}"
+      PERSISTENCE: "1"
+    ports:
+      - "${LOCALSTACK_PORT:-4566}:4566"
+    volumes:
+      - localstack-data:/var/lib/localstack
+      - ./deploy/localstack/init:/etc/localstack/init/ready.d:ro
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:4566/_localstack/health"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      APP_ENV: "${APP_ENV:-local}"
+      LOG_LEVEL: "${LOG_LEVEL:-info}"
+      HTTP_ADDRESS: :8080
+      HTTP_READ_TIMEOUT: "${HTTP_READ_TIMEOUT:-5s}"
+      HTTP_WRITE_TIMEOUT: "${HTTP_WRITE_TIMEOUT:-10s}"
+      HTTP_IDLE_TIMEOUT: "${HTTP_IDLE_TIMEOUT:-60s}"
+      READINESS_TIMEOUT: "${READINESS_TIMEOUT:-2s}"
+      SHUTDOWN_TIMEOUT: "${SHUTDOWN_TIMEOUT:-15s}"
+      DATABASE_URL: "postgres://jungle_app:jungle-local-password@postgres:5432/jungle_gaming?sslmode=disable"
+      DATABASE_CONNECT_TIMEOUT: "${DATABASE_CONNECT_TIMEOUT:-5s}"
+      DATABASE_MAX_CONNECTIONS: "${DATABASE_MAX_CONNECTIONS:-20}"
+      DATABASE_MIN_CONNECTIONS: "${DATABASE_MIN_CONNECTIONS:-2}"
+      AWS_REGION: "${AWS_REGION:-us-east-1}"
+      AWS_ACCESS_KEY_ID: "${AWS_ACCESS_KEY_ID:-jungle-local}"
+      AWS_SECRET_ACCESS_KEY: "${AWS_SECRET_ACCESS_KEY:-jungle-local}"
+      SQS_ENDPOINT: http://localstack:4566
+      SQS_INPUT_QUEUE: "${SQS_INPUT_QUEUE:-wager-transactions.fifo}"
+      SQS_DLQ: "${SQS_DLQ:-wager-transactions-dlq.fifo}"
+      SQS_EVENTS_QUEUE: "${SQS_EVENTS_QUEUE:-wager-events.fifo}"
+      OIDC_ISSUER: http://keycloak:8080/realms/jungle-gaming
+      OIDC_AUDIENCE: "${OIDC_AUDIENCE:-jungle-api}"
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
+    stop_grace_period: 20s
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  localstack-data:
