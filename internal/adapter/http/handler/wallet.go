@@ -177,6 +177,10 @@ func writeServiceError(w http.ResponseWriter, err error, notFoundCode, notFoundM
 		response.Error(w, http.StatusConflict, "WALLET_ALREADY_EXISTS", "wallet already exists for this player and currency")
 	case errors.Is(err, service.ErrInvalidCursor):
 		response.Error(w, http.StatusBadRequest, "INVALID_CURSOR", "invalid pagination cursor")
+	case errors.Is(err, repository.ErrIdempotencyKeyConflict):
+		response.Error(w, http.StatusConflict, "IDEMPOTENCY_KEY_CONFLICT", "idempotency key already used with different content")
+	case errors.Is(err, repository.ErrExternalTransactionConflict):
+		response.Error(w, http.StatusConflict, "EXTERNAL_TRANSACTION_CONFLICT", "external transaction id already used with different content")
 	case errors.As(err, &domainErr):
 		response.Error(w, http.StatusBadRequest, string(domainErr.Code), domainErr.Message)
 	default:

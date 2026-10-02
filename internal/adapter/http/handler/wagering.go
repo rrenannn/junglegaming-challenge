@@ -21,15 +21,17 @@ func NewWagering(process *service.ProcessWagerService, get *service.GetTransacti
 }
 
 type submitWagerRequest struct {
-	ProviderID             string `json:"providerId"`
-	PlayerID               string `json:"playerId"`
-	WalletID               string `json:"walletId"`
-	RoundID                string `json:"roundId"`
-	GameID                 string `json:"gameId"`
-	Kind                   string `json:"kind"`
-	Currency               string `json:"currency"`
-	Amount                 string `json:"amount"`
-	ReferenceTransactionID string `json:"referenceTransactionId,omitempty"`
+	ProviderID                     string `json:"providerId"`
+	PlayerID                       string `json:"playerId"`
+	WalletID                       string `json:"walletId"`
+	RoundID                        string `json:"roundId"`
+	GameID                         string `json:"gameId"`
+	Kind                           string `json:"kind"`
+	Currency                       string `json:"currency"`
+	Amount                         string `json:"amount"`
+	ExternalTransactionID          string `json:"externalTransactionId"`
+	IdempotencyKey                 string `json:"idempotencyKey,omitempty"`
+	ReferenceExternalTransactionID string `json:"referenceExternalTransactionId,omitempty"`
 }
 
 type submitWagerResponse struct {
@@ -69,14 +71,16 @@ func (h *Wagering) Submit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result, err := h.process.Execute(r.Context(), service.ProcessWagerCommand{
-		ProviderID:             req.ProviderID,
-		PlayerID:               req.PlayerID,
-		WalletID:               req.WalletID,
-		RoundID:                req.RoundID,
-		GameID:                 req.GameID,
-		Kind:                   domain.TransactionKind(req.Kind),
-		Amount:                 amount,
-		ReferenceTransactionID: req.ReferenceTransactionID,
+		ProviderID:                     req.ProviderID,
+		PlayerID:                       req.PlayerID,
+		WalletID:                       req.WalletID,
+		RoundID:                        req.RoundID,
+		GameID:                         req.GameID,
+		Kind:                           domain.TransactionKind(req.Kind),
+		Amount:                         amount,
+		ExternalTransactionID:          req.ExternalTransactionID,
+		IdempotencyKey:                 req.IdempotencyKey,
+		ReferenceExternalTransactionID: req.ReferenceExternalTransactionID,
 	})
 	if err != nil {
 		writeServiceError(w, err, "WAGER_TRANSACTION_NOT_FOUND", "wager transaction not found")
@@ -84,7 +88,12 @@ func (h *Wagering) Submit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	status := http.StatusOK
-	if result.Status == domain.StatusRejected {
+	switch result.Status {
+	case domain.StatusProcessed:
+		status = http.StatusOK
+	case domain.StatusPendingReference:
+		status = http.StatusAccepted
+	case domain.StatusRejected:
 		status = http.StatusUnprocessableEntity
 	}
 	response.JSON(w, status, toSubmitWagerResponse(result))
@@ -108,22 +117,24 @@ func toSubmitWagerResponse(result *service.ProcessWagerResult) submitWagerRespon
 }
 
 type wagerTransactionResponse struct {
-	ID                      string        `json:"id"`
-	ProviderID              string        `json:"providerId,omitempty"`
-	PlayerID                string        `json:"playerId"`
-	WalletID                string        `json:"walletId"`
-	RoundID                 string        `json:"roundId,omitempty"`
-	GameID                  string        `json:"gameId,omitempty"`
-	Kind                    string        `json:"kind"`
-	Status                  string        `json:"status"`
-	Direction               string        `json:"direction"`
-	Amount                  domain.Money  `json:"amount"`
-	BalanceAfter            *domain.Money `json:"balanceAfter,omitempty"`
-	ReferenceTransactionID  *string       `json:"referenceTransactionId,omitempty"`
-	ReversedByTransactionID *string       `json:"reversedByTransactionId,omitempty"`
-	FailureCode             *string       `json:"failureCode,omitempty"`
-	CreatedAt               time.Time     `json:"createdAt"`
-	UpdatedAt               time.Time     `json:"updatedAt"`
+	ID                             string        `json:"id"`
+	ProviderID                     string        `json:"providerId,omitempty"`
+	PlayerID                       string        `json:"playerId"`
+	WalletID                       string        `json:"walletId"`
+	RoundID                        string        `json:"roundId,omitempty"`
+	GameID                         string        `json:"gameId,omitempty"`
+	Kind                           string        `json:"kind"`
+	Status                         string        `json:"status"`
+	Direction                      string        `json:"direction"`
+	Amount                         domain.Money  `json:"amount"`
+	BalanceAfter                   *domain.Money `json:"balanceAfter,omitempty"`
+	ExternalTransactionID          string        `json:"externalTransactionId,omitempty"`
+	ReferenceTransactionID         *string       `json:"referenceTransactionId,omitempty"`
+	ReferenceExternalTransactionID *string       `json:"referenceExternalTransactionId,omitempty"`
+	ReversedByTransactionID        *string       `json:"reversedByTransactionId,omitempty"`
+	FailureCode                    *string       `json:"failureCode,omitempty"`
+	CreatedAt                      time.Time     `json:"createdAt"`
+	UpdatedAt                      time.Time     `json:"updatedAt"`
 }
 
 func toWagerTransactionResponse(tx *domain.WagerTransaction) wagerTransactionResponse {
@@ -133,22 +144,24 @@ func toWagerTransactionResponse(tx *domain.WagerTransaction) wagerTransactionRes
 		failureCode = &code
 	}
 	return wagerTransactionResponse{
-		ID:                      tx.ID(),
-		ProviderID:              tx.ProviderID(),
-		PlayerID:                tx.PlayerID(),
-		WalletID:                tx.WalletID(),
-		RoundID:                 tx.RoundID(),
-		GameID:                  tx.GameID(),
-		Kind:                    string(tx.Kind()),
-		Status:                  string(tx.Status()),
-		Direction:               string(tx.Direction()),
-		Amount:                  tx.Amount(),
-		BalanceAfter:            tx.BalanceAfter(),
-		ReferenceTransactionID:  tx.ReferenceTransactionID(),
-		ReversedByTransactionID: tx.ReversedBy(),
-		FailureCode:             failureCode,
-		CreatedAt:               tx.CreatedAt(),
-		UpdatedAt:               tx.UpdatedAt(),
+		ID:                             tx.ID(),
+		ProviderID:                     tx.ProviderID(),
+		PlayerID:                       tx.PlayerID(),
+		WalletID:                       tx.WalletID(),
+		RoundID:                        tx.RoundID(),
+		GameID:                         tx.GameID(),
+		Kind:                           string(tx.Kind()),
+		Status:                         string(tx.Status()),
+		Direction:                      string(tx.Direction()),
+		Amount:                         tx.Amount(),
+		BalanceAfter:                   tx.BalanceAfter(),
+		ExternalTransactionID:          tx.ExternalTransactionID(),
+		ReferenceTransactionID:         tx.ReferenceTransactionID(),
+		ReferenceExternalTransactionID: tx.ReferenceExternalTransactionID(),
+		ReversedByTransactionID:        tx.ReversedBy(),
+		FailureCode:                    failureCode,
+		CreatedAt:                      tx.CreatedAt(),
+		UpdatedAt:                      tx.UpdatedAt(),
 	}
 }
 
