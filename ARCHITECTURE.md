@@ -72,10 +72,12 @@ regardless of transport.
 - **`Money`** — `amountMinor int64` plus a validated `Currency`, no
   floats anywhere. The parser rejects empty strings, negative signs on
   external financial input, `NaN`/`Infinity`, scientific notation, more
-  than two decimal places, and `int64` overflow. Only `BRL` is a valid
-  currency today (`internal/domain/money.go`) — adding a second one means
-  extending that validation, not touching call sites, since `Money`
-  carries its own currency through every operation.
+  than two decimal places, and `int64` overflow. `BRL`, `USD`, and `EUR`
+  are valid currencies today (`internal/domain/money.go`) — adding another
+  one with the same two-decimal scale is a one-line addition to
+  `supportedCurrencies`, not a change to any call site, since `Money`
+  carries its own currency through every operation and the three HTTP/SQS
+  entry points all validate through the same `domain.NewCurrency`.
 - **`LedgerEntry`** — one immutable row per financial movement: direction,
   amount, balance before, balance after. `wallet_ledger_entries` has
   `UNIQUE(wallet_id, transaction_id)`, a `CHECK` that

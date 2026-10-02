@@ -11,10 +11,20 @@ import (
 
 type Currency string
 
-const BRL Currency = "BRL"
+const (
+	BRL Currency = "BRL"
+	USD Currency = "USD"
+	EUR Currency = "EUR"
+)
 
+// supportedCurrencies lists currencies with a two-decimal minor unit, which
+// is the only scale moneyScale/ParseMoney/Decimal support today. A
+// three-decimal currency (e.g. KWD) would need a per-currency scale, not
+// just an entry here.
 var supportedCurrencies = map[Currency]struct{}{
 	BRL: {},
+	USD: {},
+	EUR: {},
 }
 
 func NewCurrency(code string) (Currency, error) {

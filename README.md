@@ -84,7 +84,12 @@ transactions.
 | `GET /wagering/transactions/{transactionId}` | `wagering.read` | Get a wager transaction by id |
 | `GET /metrics` | none | Prometheus metrics |
 
-Supported currency: `BRL` only (see `internal/domain/money.go`).
+Supported currencies: `BRL`, `USD`, `EUR` (see `internal/domain/money.go`).
+A wallet is opened in one currency; every operation against it must match.
+Adding another currency with a two-decimal minor unit is a one-line change
+to `supportedCurrencies` — a currency with a different scale (e.g. a
+three-decimal one) would also need `moneyScale`/`ParseMoney`/`Decimal` to
+become per-currency.
 
 ## Walkthrough: open a wallet, place a bet, check the ledger
 

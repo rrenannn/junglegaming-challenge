@@ -58,8 +58,16 @@ func TestParseMoney_Invalid(t *testing.T) {
 }
 
 func TestParseMoney_InvalidCurrency(t *testing.T) {
-	if _, err := ParseMoney("10.00", Currency("USD")); err == nil {
+	if _, err := ParseMoney("10.00", Currency("XXX")); err == nil {
 		t.Fatal("expected error for unsupported currency")
+	}
+}
+
+func TestNewCurrency_SupportsBRLUSDEUR(t *testing.T) {
+	for _, code := range []string{"brl", "USD", " eur "} {
+		if _, err := NewCurrency(code); err != nil {
+			t.Fatalf("NewCurrency(%q): %v", code, err)
+		}
 	}
 }
 
@@ -104,11 +112,9 @@ func TestMoney_NegateOverflow(t *testing.T) {
 
 func TestMoney_CurrencyMismatch(t *testing.T) {
 	brl := mustMoney(t, 100)
-	usd, err := NewMoney(100, Currency("USD"))
-	if err == nil {
+	if _, err := NewMoney(100, Currency("XXX")); err == nil {
 		t.Fatal("expected invalid currency error")
 	}
-	_ = usd
 
 	if _, err := brl.Add(Money{amountMinor: 100, currency: "USD"}); err == nil {
 		t.Fatal("expected currency mismatch on Add")
