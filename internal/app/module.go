@@ -3,7 +3,11 @@ package app
 import (
 	"github.com/rrenannn/junglegaming-challenge/internal/adapter/http"
 	"github.com/rrenannn/junglegaming-challenge/internal/application/port"
+	apprepository "github.com/rrenannn/junglegaming-challenge/internal/application/repository"
+	"github.com/rrenannn/junglegaming-challenge/internal/application/service"
+	"github.com/rrenannn/junglegaming-challenge/internal/infrastructure/clock"
 	"github.com/rrenannn/junglegaming-challenge/internal/infrastructure/config"
+	"github.com/rrenannn/junglegaming-challenge/internal/infrastructure/idgen"
 	"github.com/rrenannn/junglegaming-challenge/internal/infrastructure/messaging"
 	"github.com/rrenannn/junglegaming-challenge/internal/infrastructure/observability"
 	"github.com/rrenannn/junglegaming-challenge/internal/infrastructure/postgres"
@@ -17,6 +21,10 @@ var Module = fx.Module(
 		observability.NewLogger,
 		postgres.NewPool,
 		messaging.NewSQSClient,
+		fx.Annotate(clock.NewSystemClock, fx.As(new(port.Clock))),
+		fx.Annotate(idgen.NewUUIDGenerator, fx.As(new(port.IDGenerator))),
+		fx.Annotate(postgres.NewUnitOfWork, fx.As(new(apprepository.UnitOfWork))),
+		service.NewProcessWagerService,
 		fx.Annotate(
 			postgres.NewHealthCheck,
 			fx.As(new(port.HealthCheck)),
