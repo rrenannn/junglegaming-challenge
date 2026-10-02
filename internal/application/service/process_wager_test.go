@@ -85,14 +85,15 @@ func insertConflictingTransaction(t *testing.T, pool *pgxpool.Pool, transactionI
 func betCommand(walletID, playerID, decimalAmount string) ProcessWagerCommand {
 	amount, _ := domain.ParseMoney(decimalAmount, domain.BRL)
 	return ProcessWagerCommand{
-		TransactionID: uuid.NewString(),
-		ProviderID:    "provider-a",
-		PlayerID:      playerID,
-		WalletID:      walletID,
-		RoundID:       "round-1",
-		GameID:        "game-1",
-		Kind:          domain.KindBet,
-		Amount:        amount,
+		TransactionID:         uuid.NewString(),
+		ProviderID:            "provider-a",
+		PlayerID:              playerID,
+		WalletID:              walletID,
+		RoundID:               "round-1",
+		GameID:                "game-1",
+		Kind:                  domain.KindBet,
+		Amount:                amount,
+		ExternalTransactionID: uuid.NewString(),
 	}
 }
 
@@ -209,14 +210,15 @@ func TestProcessWagerService_RefundThenRollbackRejected(t *testing.T) {
 	svc, pool := newTestService(t)
 	walletID := seedWallet(t, pool, "player-4", "100.00")
 
-	betResult, err := svc.Execute(context.Background(), betCommand(walletID, "player-4", "80.00"))
+	betCmd := betCommand(walletID, "player-4", "80.00")
+	betResult, err := svc.Execute(context.Background(), betCmd)
 	if err != nil || betResult.Status != domain.StatusProcessed {
 		t.Fatalf("bet: result=%+v err=%v", betResult, err)
 	}
 
 	refundCmd := betCommand(walletID, "player-4", "80.00")
 	refundCmd.Kind = domain.KindRefund
-	refundCmd.ReferenceTransactionID = betResult.TransactionID
+	refundCmd.ReferenceExternalTransactionID = betCmd.ExternalTransactionID
 	refundResult, err := svc.Execute(context.Background(), refundCmd)
 	if err != nil || refundResult.Status != domain.StatusProcessed {
 		t.Fatalf("refund: result=%+v err=%v", refundResult, err)
@@ -227,7 +229,7 @@ func TestProcessWagerService_RefundThenRollbackRejected(t *testing.T) {
 
 	rollbackCmd := betCommand(walletID, "player-4", "80.00")
 	rollbackCmd.Kind = domain.KindRollback
-	rollbackCmd.ReferenceTransactionID = betResult.TransactionID
+	rollbackCmd.ReferenceExternalTransactionID = betCmd.ExternalTransactionID
 	rollbackResult, err := svc.Execute(context.Background(), rollbackCmd)
 	if err != nil {
 		t.Fatalf("rollback against already-reversed bet: unexpected service error %v", err)

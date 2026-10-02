@@ -57,14 +57,15 @@ func seedLedgerFixture(t *testing.T, pool *pgxpool.Pool) (walletID string, listS
 	}
 
 	winCmd := ProcessWagerCommand{
-		TransactionID: uuid.NewString(),
-		ProviderID:    "provider-a",
-		PlayerID:      "player-ledger",
-		WalletID:      wallet.ID(),
-		RoundID:       "round-1",
-		GameID:        "game-1",
-		Kind:          domain.KindWin,
-		Amount:        mustParseMoney(t, "10.00"),
+		TransactionID:         uuid.NewString(),
+		ProviderID:            "provider-a",
+		PlayerID:              "player-ledger",
+		WalletID:              wallet.ID(),
+		RoundID:               "round-1",
+		GameID:                "game-1",
+		Kind:                  domain.KindWin,
+		Amount:                mustParseMoney(t, "10.00"),
+		ExternalTransactionID: uuid.NewString(),
 	}
 	if _, err := wagerSvc.Execute(context.Background(), winCmd); err != nil {
 		t.Fatalf("process win: %v", err)
