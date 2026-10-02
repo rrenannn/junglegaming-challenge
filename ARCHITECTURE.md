@@ -262,6 +262,11 @@ can't starve the check for a healthy one in the same request.
   `SIGKILL`, and graceful `SIGTERM` shutdown — documented with exact
   commands in the README, since they're about operational behavior under
   real Docker lifecycle events, not something a unit test can represent.
+- **Load** (`make loadtest`, `cmd/loadtest`): a standalone HTTP client that
+  drives sustained concurrent `BET` traffic across several wallets and
+  reports throughput and latency percentiles — a correctness-oriented
+  concurrency test proves nothing double-applies; this answers the
+  separate question of what the system does under sustained load.
 
 ## Known limitations / deliberately out of scope
 

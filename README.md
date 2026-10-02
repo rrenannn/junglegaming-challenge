@@ -210,6 +210,31 @@ make up
 docker compose stop app
 ```
 
+## Load testing
+
+```sh
+make loadtest   # 30s, 20 workers, 10 wallets — override with LOADTEST_*
+```
+
+`cmd/loadtest` opens `LOADTEST_WALLETS` wallets with a large balance, then
+has `LOADTEST_CONCURRENCY` workers submit unique `BET`s (unique
+idempotency key and external id each — this measures raw throughput, not
+dedup) round-robin across those wallets for `LOADTEST_DURATION`, and
+reports throughput and latency percentiles. Spreading load across several
+wallets avoids making the per-wallet lock the only thing being measured —
+contention *within* one wallet is already covered by the race-detected
+concurrency tests.
+
+A representative local run (`LOADTEST_DURATION=15s LOADTEST_CONCURRENCY=20
+LOADTEST_WALLETS=10`, against the same `docker compose up --build` stack
+described above, 2026):
+
+```
+requests: 52886 (success=52886, failed=0)
+throughput: 3525.7 req/s
+latency: p50=4.4ms p95=12.9ms p99=23.3ms max=80.9ms
+```
+
 ## Metrics
 
 `GET /metrics` exposes, among the standard Go/process metrics:

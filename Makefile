@@ -1,7 +1,7 @@
 GO_IMAGE ?= golang:1.27.1
 GO_RUN = docker run --rm -v $(CURDIR):/workspace -w /workspace $(GO_IMAGE)
 
-.PHONY: up down logs build tidy fmt test test-race vet check migrate-up migrate-down token-provider-a token-provider-b token-internal scale-up scale-down
+.PHONY: up down logs build tidy fmt test test-race vet check migrate-up migrate-down token-provider-a token-provider-b token-internal scale-up scale-down loadtest
 
 up:
 	docker compose up --build
@@ -62,3 +62,21 @@ scale-up:
 
 scale-down:
 	docker compose -f compose.yaml -f compose.scale.yaml down
+
+LOADTEST_DURATION ?= 30s
+LOADTEST_CONCURRENCY ?= 20
+LOADTEST_WALLETS ?= 10
+
+# Fires BET requests at the running app for LOADTEST_DURATION, spread
+# across LOADTEST_WALLETS wallets by LOADTEST_CONCURRENCY workers, and
+# reports throughput and latency percentiles. Requires `make up` and
+# `make migrate-up` to have already run.
+loadtest:
+	INTERNAL_TOKEN="$$($(MAKE) -s token-internal)"; \
+	PROVIDER_TOKEN="$$($(MAKE) -s token-provider-a)"; \
+	go run ./cmd/loadtest \
+	  -internal-token="$$INTERNAL_TOKEN" \
+	  -provider-token="$$PROVIDER_TOKEN" \
+	  -duration=$(LOADTEST_DURATION) \
+	  -concurrency=$(LOADTEST_CONCURRENCY) \
+	  -wallets=$(LOADTEST_WALLETS)
