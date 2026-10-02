@@ -2,6 +2,7 @@ package app
 
 import (
 	"github.com/rrenannn/junglegaming-challenge/internal/adapter/http"
+	"github.com/rrenannn/junglegaming-challenge/internal/adapter/http/handler"
 	"github.com/rrenannn/junglegaming-challenge/internal/application/port"
 	apprepository "github.com/rrenannn/junglegaming-challenge/internal/application/repository"
 	"github.com/rrenannn/junglegaming-challenge/internal/application/service"
@@ -27,6 +28,9 @@ var Module = fx.Module(
 		fx.Annotate(postgres.NewUnitOfWork, fx.As(new(apprepository.UnitOfWork))),
 		fx.Annotate(auth.NewKeycloakVerifier, fx.As(new(port.IdentityVerifier))),
 		service.NewProcessWagerService,
+		service.NewOpenWalletService,
+		service.NewGetWalletService,
+		handler.NewWallet,
 		fx.Annotate(
 			postgres.NewHealthCheck,
 			fx.As(new(port.HealthCheck)),
@@ -39,7 +43,7 @@ var Module = fx.Module(
 		),
 		fx.Annotate(
 			httpadapter.NewServer,
-			fx.ParamTags("", "", `group:"readiness"`),
+			fx.ParamTags("", "", `group:"readiness"`, "", ""),
 		),
 	),
 	fx.Invoke(registerLifecycle),

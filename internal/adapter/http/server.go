@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/rrenannn/junglegaming-challenge/internal/adapter/http/handler"
+	"github.com/rrenannn/junglegaming-challenge/internal/adapter/http/middleware"
 	"github.com/rrenannn/junglegaming-challenge/internal/application/port"
 	"github.com/rrenannn/junglegaming-challenge/internal/infrastructure/config"
 )
@@ -17,11 +18,17 @@ type Server struct {
 	logger *slog.Logger
 }
 
-func NewServer(cfg config.Config, logger *slog.Logger, checks []port.HealthCheck) *Server {
+func NewServer(cfg config.Config, logger *slog.Logger, checks []port.HealthCheck, verifier port.IdentityVerifier, walletHandler *handler.Wallet) *Server {
 	health := handler.NewHealth(checks, cfg.HTTP.ReadinessTimeout, logger)
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health/live", health.Live)
 	mux.HandleFunc("GET /health/ready", health.Ready)
+
+	internalOnly := func(next http.HandlerFunc) http.Handler {
+		return middleware.Authenticate(verifier)(middleware.RequireScope("wallets.manage")(next))
+	}
+	mux.Handle("POST /wallets", internalOnly(walletHandler.Open))
+	mux.Handle("GET /wallets/{walletId}", internalOnly(walletHandler.Get))
 
 	return &Server{
 		server: &http.Server{
