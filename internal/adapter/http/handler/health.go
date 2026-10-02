@@ -2,11 +2,11 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
 	"net/http"
 	"time"
 
+	"github.com/rrenannn/junglegaming-challenge/internal/adapter/http/response"
 	"github.com/rrenannn/junglegaming-challenge/internal/application/port"
 )
 
@@ -20,11 +20,11 @@ func NewHealth(checks []port.HealthCheck, timeout time.Duration, logger *slog.Lo
 	return &Health{checks: checks, timeout: timeout, logger: logger}
 }
 
-func (h *Health) Live(response http.ResponseWriter, _ *http.Request) {
-	writeJSON(response, http.StatusOK, healthResponse{Status: "live"})
+func (h *Health) Live(w http.ResponseWriter, _ *http.Request) {
+	response.JSON(w, http.StatusOK, healthResponse{Status: "live"})
 }
 
-func (h *Health) Ready(response http.ResponseWriter, request *http.Request) {
+func (h *Health) Ready(w http.ResponseWriter, request *http.Request) {
 	ctx, cancel := context.WithTimeout(request.Context(), h.timeout)
 	defer cancel()
 
@@ -42,18 +42,10 @@ func (h *Health) Ready(response http.ResponseWriter, request *http.Request) {
 		result.Checks[check.Name()] = "available"
 	}
 
-	writeJSON(response, status, result)
+	response.JSON(w, status, result)
 }
 
 type healthResponse struct {
 	Status string            `json:"status"`
 	Checks map[string]string `json:"checks,omitempty"`
-}
-
-func writeJSON(response http.ResponseWriter, status int, value any) {
-	response.Header().Set("Content-Type", "application/json")
-	response.WriteHeader(status)
-	if err := json.NewEncoder(response).Encode(value); err != nil {
-		slog.Error("write JSON response", "error", err)
-	}
 }
