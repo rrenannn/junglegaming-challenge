@@ -31,6 +31,7 @@ var Module = fx.Module(
 		service.NewOpenWalletService,
 		service.NewGetWalletService,
 		service.NewListLedgerService,
+		service.NewReconcileWalletService,
 		service.NewGetTransactionService,
 		handler.NewWallet,
 		handler.NewWagering,

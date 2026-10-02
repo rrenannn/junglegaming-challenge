@@ -33,6 +33,7 @@ func NewServer(cfg config.Config, logger *slog.Logger, checks []port.HealthCheck
 	mux.Handle("POST /wallets", internalOnly(walletHandler.Open))
 	mux.Handle("GET /wallets/{walletId}", internalOnly(walletHandler.Get))
 	mux.Handle("GET /wallets/{walletId}/ledger", internalOnly(walletHandler.Ledger))
+	mux.Handle("POST /wallets/{walletId}/reconciliation", internalOnly(walletHandler.Reconcile))
 
 	mux.Handle("POST /wagering/transactions", withScope("wagering.write", wageringHandler.Submit))
 	mux.Handle("GET /wagering/transactions/{transactionId}", withScope("wagering.read", wageringHandler.Get))
