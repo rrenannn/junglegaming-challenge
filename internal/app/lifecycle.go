@@ -2,11 +2,13 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	httpadapter "github.com/rrenannn/junglegaming-challenge/internal/adapter/http"
+	sqsadapter "github.com/rrenannn/junglegaming-challenge/internal/adapter/sqs"
 	"github.com/rrenannn/junglegaming-challenge/internal/application/port"
 	"github.com/rrenannn/junglegaming-challenge/internal/infrastructure/config"
 	"go.uber.org/fx"
@@ -20,6 +22,7 @@ type lifecycleDependencies struct {
 	Logger    *slog.Logger
 	Pool      *pgxpool.Pool
 	Server    *httpadapter.Server
+	Consumer  *sqsadapter.Consumer
 	Checks    []port.HealthCheck `group:"readiness"`
 }
 
@@ -37,6 +40,9 @@ func registerLifecycle(dependencies lifecycleDependencies) {
 			if err := dependencies.Server.Start(); err != nil {
 				return fmt.Errorf("start HTTP server: %w", err)
 			}
+			if err := dependencies.Consumer.Start(ctx); err != nil {
+				return fmt.Errorf("start SQS consumer: %w", err)
+			}
 			dependencies.Logger.Info("application started")
 			return nil
 		},
@@ -44,11 +50,13 @@ func registerLifecycle(dependencies lifecycleDependencies) {
 			shutdownCtx, cancel := context.WithTimeout(ctx, dependencies.Config.HTTP.ShutdownTimeout)
 			defer cancel()
 
-			err := dependencies.Server.Shutdown(shutdownCtx)
+			consumerErr := dependencies.Consumer.Shutdown(shutdownCtx)
+			serverErr := dependencies.Server.Shutdown(shutdownCtx)
 			dependencies.Pool.Close()
 			dependencies.Logger.Info("application stopped")
-			if err != nil {
-				return fmt.Errorf("shutdown HTTP server: %w", err)
+
+			if err := errors.Join(consumerErr, serverErr); err != nil {
+				return fmt.Errorf("shutdown: %w", err)
 			}
 			return nil
 		},
