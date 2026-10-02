@@ -5,6 +5,7 @@ import (
 	"github.com/rrenannn/junglegaming-challenge/internal/adapter/http/handler"
 	sqsadapter "github.com/rrenannn/junglegaming-challenge/internal/adapter/sqs"
 	sqshandler "github.com/rrenannn/junglegaming-challenge/internal/adapter/sqs/handler"
+	"github.com/rrenannn/junglegaming-challenge/internal/adapter/sqs/worker"
 	"github.com/rrenannn/junglegaming-challenge/internal/application/port"
 	apprepository "github.com/rrenannn/junglegaming-challenge/internal/application/repository"
 	"github.com/rrenannn/junglegaming-challenge/internal/application/service"
@@ -39,6 +40,7 @@ var Module = fx.Module(
 		handler.NewWagering,
 		sqshandler.NewWager,
 		sqsadapter.NewConsumer,
+		worker.NewOutboxPublisher,
 		fx.Annotate(
 			postgres.NewHealthCheck,
 			fx.As(new(port.HealthCheck)),
