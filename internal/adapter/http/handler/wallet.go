@@ -14,13 +14,14 @@ import (
 )
 
 type Wallet struct {
-	open *service.OpenWalletService
-	get  *service.GetWalletService
-	list *service.ListLedgerService
+	open      *service.OpenWalletService
+	get       *service.GetWalletService
+	list      *service.ListLedgerService
+	reconcile *service.ReconcileWalletService
 }
 
-func NewWallet(open *service.OpenWalletService, get *service.GetWalletService, list *service.ListLedgerService) *Wallet {
-	return &Wallet{open: open, get: get, list: list}
+func NewWallet(open *service.OpenWalletService, get *service.GetWalletService, list *service.ListLedgerService, reconcile *service.ReconcileWalletService) *Wallet {
+	return &Wallet{open: open, get: get, list: list, reconcile: reconcile}
 }
 
 type openWalletRequest struct {
@@ -102,6 +103,36 @@ func (h *Wallet) Ledger(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.JSON(w, http.StatusOK, toLedgerPageResponse(page))
+}
+
+func (h *Wallet) Reconcile(w http.ResponseWriter, r *http.Request) {
+	walletID := r.PathValue("walletId")
+
+	result, err := h.reconcile.Execute(r.Context(), walletID)
+	if err != nil {
+		writeServiceError(w, err, "WALLET_NOT_FOUND", "wallet not found")
+		return
+	}
+
+	response.JSON(w, http.StatusOK, toReconciliationResponse(result))
+}
+
+type reconciliationResponse struct {
+	WalletID        string        `json:"walletId"`
+	RecordedBalance domain.Money  `json:"recordedBalance"`
+	ComputedBalance domain.Money  `json:"computedBalance"`
+	Balanced        bool          `json:"balanced"`
+	Divergence      *domain.Money `json:"divergence"`
+}
+
+func toReconciliationResponse(result *service.ReconciliationResult) reconciliationResponse {
+	return reconciliationResponse{
+		WalletID:        result.WalletID,
+		RecordedBalance: result.RecordedBalance,
+		ComputedBalance: result.ComputedBalance,
+		Balanced:        result.Balanced,
+		Divergence:      result.Divergence,
+	}
 }
 
 type ledgerEntryResponse struct {
