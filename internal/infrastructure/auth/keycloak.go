@@ -26,13 +26,20 @@ type keycloakClaims struct {
 
 func NewKeycloakVerifier(cfg config.Config) (*KeycloakVerifier, error) {
 	jwksURL := strings.TrimRight(cfg.OIDC.Issuer, "/") + "/protocol/openid-connect/certs"
+	return newKeycloakVerifier(cfg.OIDC.Issuer, cfg.OIDC.Audience, jwksURL)
+}
 
+// newKeycloakVerifier lets callers fetch JWKS from a different URL than the
+// expected issuer claim — needed by tests, which reach Keycloak through its
+// host-mapped port while the issuer embedded in tokens is pinned to the
+// Docker network hostname (see compose.yaml's KC_HOSTNAME).
+func newKeycloakVerifier(issuer, audience, jwksURL string) (*KeycloakVerifier, error) {
 	jwks, err := keyfunc.NewDefaultCtx(context.Background(), []string{jwksURL})
 	if err != nil {
 		return nil, fmt.Errorf("create JWKS client: %w", err)
 	}
 
-	return &KeycloakVerifier{issuer: cfg.OIDC.Issuer, audience: cfg.OIDC.Audience, jwks: jwks}, nil
+	return &KeycloakVerifier{issuer: issuer, audience: audience, jwks: jwks}, nil
 }
 
 func (v *KeycloakVerifier) Verify(ctx context.Context, bearerToken string) (port.Identity, error) {

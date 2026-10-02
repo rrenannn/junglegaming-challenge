@@ -11,25 +11,30 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-
-	"github.com/rrenannn/junglegaming-challenge/internal/infrastructure/config"
 )
 
 const (
-	testIssuer      = "http://localhost:8081/realms/jungle-gaming"
-	testTokenURL    = testIssuer + "/protocol/openid-connect/token"
-	testAudience    = "jungle-api"
-	providerAClient = "provider-a"
-	providerASecret = "provider-a-local-secret"
-	internalClient  = "wallet-service"
-	internalSecret  = "wallet-service-local-secret"
+	// testIssuer matches compose.yaml's KC_HOSTNAME pin (keycloak:8080) —
+	// the iss claim embedded in every token, regardless of which host:port
+	// a client used to request it.
+	testIssuer = "http://keycloak:8080/realms/jungle-gaming"
+	// testKeycloakBaseURL is how this test, running on the host, actually
+	// reaches Keycloak: its host-mapped port, not the Docker network
+	// hostname baked into testIssuer.
+	testKeycloakBaseURL = "http://localhost:8081/realms/jungle-gaming"
+	testTokenURL        = testKeycloakBaseURL + "/protocol/openid-connect/token"
+	testJWKSURL         = testKeycloakBaseURL + "/protocol/openid-connect/certs"
+	testAudience        = "jungle-api"
+	providerAClient     = "provider-a"
+	providerASecret     = "provider-a-local-secret"
+	internalClient      = "wallet-service"
+	internalSecret      = "wallet-service-local-secret"
 )
 
 func newTestVerifier(t *testing.T) *KeycloakVerifier {
 	t.Helper()
 
-	cfg := config.Config{OIDC: config.OIDCConfig{Issuer: testIssuer, Audience: testAudience}}
-	verifier, err := NewKeycloakVerifier(cfg)
+	verifier, err := newKeycloakVerifier(testIssuer, testAudience, testJWKSURL)
 	if err != nil {
 		t.Skipf("keycloak not available: %v", err)
 	}
