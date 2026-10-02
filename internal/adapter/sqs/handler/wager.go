@@ -25,15 +25,17 @@ func NewWager(process *service.ProcessWagerService, logger *slog.Logger) *Wager 
 }
 
 type wagerMessage struct {
-	ProviderID             string `json:"providerId"`
-	PlayerID               string `json:"playerId"`
-	WalletID               string `json:"walletId"`
-	RoundID                string `json:"roundId"`
-	GameID                 string `json:"gameId"`
-	Kind                   string `json:"kind"`
-	Currency               string `json:"currency"`
-	Amount                 string `json:"amount"`
-	ReferenceTransactionID string `json:"referenceTransactionId,omitempty"`
+	ProviderID                     string `json:"providerId"`
+	PlayerID                       string `json:"playerId"`
+	WalletID                       string `json:"walletId"`
+	RoundID                        string `json:"roundId"`
+	GameID                         string `json:"gameId"`
+	Kind                           string `json:"kind"`
+	Currency                       string `json:"currency"`
+	Amount                         string `json:"amount"`
+	ExternalTransactionID          string `json:"externalTransactionId"`
+	IdempotencyKey                 string `json:"idempotencyKey,omitempty"`
+	ReferenceExternalTransactionID string `json:"referenceExternalTransactionId,omitempty"`
 }
 
 // Handle processes one SQS message. A nil error means the message can be
@@ -57,14 +59,16 @@ func (h *Wager) Handle(ctx context.Context, msg types.Message) error {
 	}
 
 	result, err := h.process.Execute(ctx, service.ProcessWagerCommand{
-		ProviderID:             body.ProviderID,
-		PlayerID:               body.PlayerID,
-		WalletID:               body.WalletID,
-		RoundID:                body.RoundID,
-		GameID:                 body.GameID,
-		Kind:                   domain.TransactionKind(body.Kind),
-		Amount:                 amount,
-		ReferenceTransactionID: body.ReferenceTransactionID,
+		ProviderID:                     body.ProviderID,
+		PlayerID:                       body.PlayerID,
+		WalletID:                       body.WalletID,
+		RoundID:                        body.RoundID,
+		GameID:                         body.GameID,
+		Kind:                           domain.TransactionKind(body.Kind),
+		Amount:                         amount,
+		ExternalTransactionID:          body.ExternalTransactionID,
+		IdempotencyKey:                 body.IdempotencyKey,
+		ReferenceExternalTransactionID: body.ReferenceExternalTransactionID,
 		Inbox: &service.InboxInfo{
 			ConsumerName: ConsumerName,
 			MessageID:    aws.ToString(msg.MessageId),
