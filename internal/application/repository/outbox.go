@@ -21,4 +21,5 @@ type OutboxRepository interface {
 	ClaimBatch(ctx context.Context, workerID string, leaseDuration time.Duration, limit int) ([]*OutboxEvent, error)
 	MarkPublished(ctx context.Context, id string, publishedAt time.Time) error
 	ReleaseForRetry(ctx context.Context, id string, nextAttemptAt time.Time) error
+	PendingStats(ctx context.Context) (count int, oldestAgeSeconds float64, err error)
 }

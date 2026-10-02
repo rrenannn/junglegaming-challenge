@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/rrenannn/junglegaming-challenge/internal/application/port"
 	"github.com/rrenannn/junglegaming-challenge/internal/application/repository"
 	"github.com/rrenannn/junglegaming-challenge/internal/domain"
 	"github.com/rrenannn/junglegaming-challenge/internal/infrastructure/idgen"
@@ -41,7 +42,7 @@ func seedLedgerFixture(t *testing.T, pool *pgxpool.Pool) (walletID string, listS
 	ids := idgen.NewUUIDGenerator()
 
 	openSvc := NewOpenWalletService(uow, clk, ids)
-	wagerSvc := NewProcessWagerService(uow, clk, ids)
+	wagerSvc := NewProcessWagerService(uow, clk, ids, port.NoopMetrics{})
 
 	wallet, err := openSvc.Execute(context.Background(), OpenWalletCommand{
 		PlayerID:       "player-ledger",

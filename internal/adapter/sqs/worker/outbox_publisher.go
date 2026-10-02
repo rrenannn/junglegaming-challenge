@@ -13,6 +13,7 @@ import (
 
 	"github.com/rrenannn/junglegaming-challenge/internal/application/repository"
 	"github.com/rrenannn/junglegaming-challenge/internal/infrastructure/config"
+	"github.com/rrenannn/junglegaming-challenge/internal/infrastructure/observability"
 )
 
 const (
@@ -31,17 +32,19 @@ type OutboxPublisher struct {
 	queueURL  string
 	workerID  string
 	logger    *slog.Logger
+	metrics   *observability.Metrics
 	cancel    context.CancelFunc
 	done      chan struct{}
 }
 
-func NewOutboxPublisher(uow repository.UnitOfWork, client *sqs.Client, cfg config.Config, logger *slog.Logger) *OutboxPublisher {
+func NewOutboxPublisher(uow repository.UnitOfWork, client *sqs.Client, cfg config.Config, logger *slog.Logger, metrics *observability.Metrics) *OutboxPublisher {
 	return &OutboxPublisher{
 		uow:       uow,
 		client:    client,
 		queueName: cfg.SQS.EventsQueue,
 		workerID:  uuid.NewString(),
 		logger:    logger,
+		metrics:   metrics,
 	}
 }
 
@@ -87,8 +90,24 @@ func (p *OutboxPublisher) run(ctx context.Context) {
 			return
 		case <-ticker.C:
 			p.publishBatch(ctx)
+			p.updatePendingMetrics(ctx)
 		}
 	}
+}
+
+func (p *OutboxPublisher) updatePendingMetrics(ctx context.Context) {
+	var count int
+	var oldestAgeSeconds float64
+	err := p.uow.WithinTransaction(ctx, func(ctx context.Context, repos repository.TransactionRepositories) error {
+		var err error
+		count, oldestAgeSeconds, err = repos.Outbox().PendingStats(ctx)
+		return err
+	})
+	if err != nil {
+		p.logger.Error("outbox pending stats", "error", err)
+		return
+	}
+	p.metrics.SetOutboxPending(count, oldestAgeSeconds)
 }
 
 func (p *OutboxPublisher) publishBatch(ctx context.Context) {

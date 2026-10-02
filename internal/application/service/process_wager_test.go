@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/rrenannn/junglegaming-challenge/internal/application/port"
 	"github.com/rrenannn/junglegaming-challenge/internal/domain"
 	"github.com/rrenannn/junglegaming-challenge/internal/infrastructure/clock"
 	"github.com/rrenannn/junglegaming-challenge/internal/infrastructure/idgen"
@@ -18,7 +19,7 @@ func newTestService(t *testing.T) (*ProcessWagerService, *pgxpool.Pool) {
 	t.Helper()
 	pool := newTestPool(t)
 	uow := postgres.NewUnitOfWork(pool)
-	return NewProcessWagerService(uow, clock.NewSystemClock(), idgen.NewUUIDGenerator()), pool
+	return NewProcessWagerService(uow, clock.NewSystemClock(), idgen.NewUUIDGenerator(), port.NoopMetrics{}), pool
 }
 
 func seedWallet(t *testing.T, pool *pgxpool.Pool, playerID, decimalBalance string) string {

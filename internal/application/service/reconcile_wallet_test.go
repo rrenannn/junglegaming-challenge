@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/rrenannn/junglegaming-challenge/internal/application/port"
 	"github.com/rrenannn/junglegaming-challenge/internal/application/repository"
 	"github.com/rrenannn/junglegaming-challenge/internal/infrastructure/clock"
 	"github.com/rrenannn/junglegaming-challenge/internal/infrastructure/idgen"
@@ -31,7 +32,7 @@ func TestReconcileWalletService_BalancedAfterBet(t *testing.T) {
 		t.Fatalf("seed bet: %v", err)
 	}
 
-	svc := NewReconcileWalletService(uow)
+	svc := NewReconcileWalletService(uow, port.NoopMetrics{})
 	result, err := svc.Execute(context.Background(), wallet.ID())
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -61,7 +62,7 @@ func TestReconcileWalletService_BalancedWithNoEntries(t *testing.T) {
 		t.Fatalf("open wallet: %v", err)
 	}
 
-	svc := NewReconcileWalletService(uow)
+	svc := NewReconcileWalletService(uow, port.NoopMetrics{})
 	result, err := svc.Execute(context.Background(), wallet.ID())
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -96,7 +97,7 @@ func TestReconcileWalletService_DetectsDivergence(t *testing.T) {
 		t.Fatalf("tamper wallet balance: %v", err)
 	}
 
-	svc := NewReconcileWalletService(uow)
+	svc := NewReconcileWalletService(uow, port.NoopMetrics{})
 	result, err := svc.Execute(context.Background(), wallet.ID())
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
@@ -118,7 +119,7 @@ func TestReconcileWalletService_DetectsDivergence(t *testing.T) {
 
 func TestReconcileWalletService_NotFound(t *testing.T) {
 	pool := newTestPool(t)
-	svc := NewReconcileWalletService(postgres.NewUnitOfWork(pool))
+	svc := NewReconcileWalletService(postgres.NewUnitOfWork(pool), port.NoopMetrics{})
 
 	_, err := svc.Execute(context.Background(), uuid.NewString())
 	if !errors.Is(err, repository.ErrNotFound) {

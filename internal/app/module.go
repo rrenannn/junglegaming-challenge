@@ -25,6 +25,8 @@ var Module = fx.Module(
 	fx.Provide(
 		config.Load,
 		observability.NewLogger,
+		observability.NewMetrics,
+		func(m *observability.Metrics) port.Metrics { return m },
 		postgres.NewPool,
 		messaging.NewSQSClient,
 		fx.Annotate(clock.NewSystemClock, fx.As(new(port.Clock))),

@@ -86,6 +86,21 @@ func (r *OutboxRepository) MarkPublished(ctx context.Context, id string, publish
 	return nil
 }
 
+func (r *OutboxRepository) PendingStats(ctx context.Context) (count int, oldestAgeSeconds float64, err error) {
+	var oldestAge *float64
+	err = r.tx.QueryRow(ctx, `
+		SELECT count(*), EXTRACT(EPOCH FROM (now() - min(occurred_at)))
+		FROM outbox_events WHERE published_at IS NULL
+	`).Scan(&count, &oldestAge)
+	if err != nil {
+		return 0, 0, fmt.Errorf("outbox pending stats: %w", err)
+	}
+	if oldestAge != nil {
+		oldestAgeSeconds = *oldestAge
+	}
+	return count, oldestAgeSeconds, nil
+}
+
 func (r *OutboxRepository) ReleaseForRetry(ctx context.Context, id string, nextAttemptAt time.Time) error {
 	tag, err := r.tx.Exec(ctx, `
 		UPDATE outbox_events SET locked_by = NULL, locked_until = NULL, next_attempt_at = $1 WHERE id = $2

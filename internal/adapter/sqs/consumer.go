@@ -12,6 +12,7 @@ import (
 
 	"github.com/rrenannn/junglegaming-challenge/internal/adapter/sqs/handler"
 	"github.com/rrenannn/junglegaming-challenge/internal/infrastructure/config"
+	"github.com/rrenannn/junglegaming-challenge/internal/infrastructure/observability"
 )
 
 type Consumer struct {
@@ -20,16 +21,18 @@ type Consumer struct {
 	queueURL  string
 	handler   *handler.Wager
 	logger    *slog.Logger
+	metrics   *observability.Metrics
 	cancel    context.CancelFunc
 	done      chan struct{}
 }
 
-func NewConsumer(client *sqs.Client, cfg config.Config, wagerHandler *handler.Wager, logger *slog.Logger) *Consumer {
+func NewConsumer(client *sqs.Client, cfg config.Config, wagerHandler *handler.Wager, logger *slog.Logger, metrics *observability.Metrics) *Consumer {
 	return &Consumer{
 		client:    client,
 		queueName: cfg.SQS.InputQueue,
 		handler:   wagerHandler,
 		logger:    logger,
+		metrics:   metrics,
 	}
 }
 
@@ -92,9 +95,11 @@ func (c *Consumer) run(ctx context.Context) {
 
 func (c *Consumer) processOne(ctx context.Context, msg types.Message) {
 	if err := c.handler.Handle(ctx, msg); err != nil {
+		c.metrics.ObserveSQSMessage("error")
 		c.logger.Error("process wager message", "messageId", aws.ToString(msg.MessageId), "error", err)
 		return
 	}
+	c.metrics.ObserveSQSMessage("success")
 
 	if _, err := c.client.DeleteMessage(ctx, &sqs.DeleteMessageInput{
 		QueueUrl:      aws.String(c.queueURL),

@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 
+	"github.com/rrenannn/junglegaming-challenge/internal/application/port"
 	"github.com/rrenannn/junglegaming-challenge/internal/application/repository"
 	"github.com/rrenannn/junglegaming-challenge/internal/domain"
 )
@@ -16,11 +17,12 @@ type ReconciliationResult struct {
 }
 
 type ReconcileWalletService struct {
-	uow repository.UnitOfWork
+	uow     repository.UnitOfWork
+	metrics port.Metrics
 }
 
-func NewReconcileWalletService(uow repository.UnitOfWork) *ReconcileWalletService {
-	return &ReconcileWalletService{uow: uow}
+func NewReconcileWalletService(uow repository.UnitOfWork, metrics port.Metrics) *ReconcileWalletService {
+	return &ReconcileWalletService{uow: uow, metrics: metrics}
 }
 
 func (s *ReconcileWalletService) Execute(ctx context.Context, walletID string) (*ReconciliationResult, error) {
@@ -54,6 +56,7 @@ func (s *ReconcileWalletService) Execute(ctx context.Context, walletID string) (
 				return err
 			}
 			result.Divergence = &divergence
+			s.metrics.ObserveReconciliationDivergence()
 		}
 		return nil
 	})

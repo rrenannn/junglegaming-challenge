@@ -7,6 +7,8 @@ import (
 	"net"
 	"net/http"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+
 	"github.com/rrenannn/junglegaming-challenge/internal/adapter/http/handler"
 	"github.com/rrenannn/junglegaming-challenge/internal/adapter/http/middleware"
 	"github.com/rrenannn/junglegaming-challenge/internal/application/port"
@@ -23,6 +25,7 @@ func NewServer(cfg config.Config, logger *slog.Logger, checks []port.HealthCheck
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health/live", health.Live)
 	mux.HandleFunc("GET /health/ready", health.Ready)
+	mux.Handle("GET /metrics", promhttp.Handler())
 
 	withScope := func(scope string, next http.HandlerFunc) http.Handler {
 		return middleware.Authenticate(verifier)(middleware.RequireScope(scope)(next))

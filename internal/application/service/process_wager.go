@@ -62,13 +62,14 @@ type ProcessWagerResult struct {
 }
 
 type ProcessWagerService struct {
-	uow   repository.UnitOfWork
-	clock port.Clock
-	ids   port.IDGenerator
+	uow     repository.UnitOfWork
+	clock   port.Clock
+	ids     port.IDGenerator
+	metrics port.Metrics
 }
 
-func NewProcessWagerService(uow repository.UnitOfWork, clock port.Clock, ids port.IDGenerator) *ProcessWagerService {
-	return &ProcessWagerService{uow: uow, clock: clock, ids: ids}
+func NewProcessWagerService(uow repository.UnitOfWork, clock port.Clock, ids port.IDGenerator, metrics port.Metrics) *ProcessWagerService {
+	return &ProcessWagerService{uow: uow, clock: clock, ids: ids, metrics: metrics}
 }
 
 func (s *ProcessWagerService) Execute(ctx context.Context, cmd ProcessWagerCommand) (*ProcessWagerResult, error) {
@@ -79,6 +80,7 @@ func (s *ProcessWagerService) Execute(ctx context.Context, cmd ProcessWagerComma
 		cmd.IdempotencyKey = cmd.ExternalTransactionID
 	}
 
+	start := time.Now()
 	var result *ProcessWagerResult
 
 	err := s.uow.WithinTransaction(ctx, func(ctx context.Context, repos repository.TransactionRepositories) error {
@@ -228,6 +230,19 @@ func (s *ProcessWagerService) Execute(ctx context.Context, cmd ProcessWagerComma
 		result = processedResult
 		return nil
 	})
+
+	switch {
+	case errors.Is(err, ErrInboxHashConflict):
+		s.metrics.ObserveWagerConflict("inbox_hash")
+	case errors.Is(err, repository.ErrIdempotencyKeyConflict):
+		s.metrics.ObserveWagerConflict("idempotency_key")
+	case err == nil && result != nil:
+		s.metrics.ObserveWagerOperation(string(cmd.Kind), string(result.Status), time.Since(start))
+		if result.AlreadyProcessed {
+			s.metrics.ObserveWagerReplay()
+		}
+	}
+
 	if err != nil {
 		return nil, err
 	}
