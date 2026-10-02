@@ -31,7 +31,9 @@ var Module = fx.Module(
 		service.NewOpenWalletService,
 		service.NewGetWalletService,
 		service.NewListLedgerService,
+		service.NewGetTransactionService,
 		handler.NewWallet,
+		handler.NewWagering,
 		fx.Annotate(
 			postgres.NewHealthCheck,
 			fx.As(new(port.HealthCheck)),
@@ -44,7 +46,7 @@ var Module = fx.Module(
 		),
 		fx.Annotate(
 			httpadapter.NewServer,
-			fx.ParamTags("", "", `group:"readiness"`, "", ""),
+			fx.ParamTags("", "", `group:"readiness"`, "", "", ""),
 		),
 	),
 	fx.Invoke(registerLifecycle),

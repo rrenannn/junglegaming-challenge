@@ -18,18 +18,24 @@ type Server struct {
 	logger *slog.Logger
 }
 
-func NewServer(cfg config.Config, logger *slog.Logger, checks []port.HealthCheck, verifier port.IdentityVerifier, walletHandler *handler.Wallet) *Server {
+func NewServer(cfg config.Config, logger *slog.Logger, checks []port.HealthCheck, verifier port.IdentityVerifier, walletHandler *handler.Wallet, wageringHandler *handler.Wagering) *Server {
 	health := handler.NewHealth(checks, cfg.HTTP.ReadinessTimeout, logger)
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health/live", health.Live)
 	mux.HandleFunc("GET /health/ready", health.Ready)
 
+	withScope := func(scope string, next http.HandlerFunc) http.Handler {
+		return middleware.Authenticate(verifier)(middleware.RequireScope(scope)(next))
+	}
 	internalOnly := func(next http.HandlerFunc) http.Handler {
-		return middleware.Authenticate(verifier)(middleware.RequireScope("wallets.manage")(next))
+		return withScope("wallets.manage", next)
 	}
 	mux.Handle("POST /wallets", internalOnly(walletHandler.Open))
 	mux.Handle("GET /wallets/{walletId}", internalOnly(walletHandler.Get))
 	mux.Handle("GET /wallets/{walletId}/ledger", internalOnly(walletHandler.Ledger))
+
+	mux.Handle("POST /wagering/transactions", withScope("wagering.write", wageringHandler.Submit))
+	mux.Handle("GET /wagering/transactions/{transactionId}", withScope("wagering.read", wageringHandler.Get))
 
 	return &Server{
 		server: &http.Server{
