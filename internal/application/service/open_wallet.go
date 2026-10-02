@@ -55,7 +55,10 @@ func (s *OpenWalletService) Execute(ctx context.Context, cmd OpenWalletCommand) 
 		}
 
 		if openingBalance.IsPositive() {
-			tx, err := domain.NewWagerTransaction(s.ids.NewID(), "", cmd.PlayerID, wallet.ID(), "", "", domain.KindOpening, openingBalance, now)
+			tx, err := domain.NewWagerTransaction(domain.NewWagerTransactionParams{
+				ID: s.ids.NewID(), PlayerID: cmd.PlayerID, WalletID: wallet.ID(),
+				Kind: domain.KindOpening, Amount: openingBalance,
+			}, now)
 			if err != nil {
 				return err
 			}
