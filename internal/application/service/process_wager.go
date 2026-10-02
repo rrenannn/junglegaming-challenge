@@ -2,6 +2,9 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"time"
 
@@ -9,6 +12,22 @@ import (
 	"github.com/rrenannn/junglegaming-challenge/internal/application/repository"
 	"github.com/rrenannn/junglegaming-challenge/internal/domain"
 )
+
+// ErrInboxHashConflict is returned when a message with an already-known
+// (ConsumerName, MessageID) arrives with different business content than
+// what was processed before — a redelivery should never legitimately carry
+// different content, so this is treated as invalid and auditable rather
+// than silently reprocessed.
+var ErrInboxHashConflict = errors.New("inbox message hash conflict")
+
+// InboxInfo identifies the transport message behind a command, so Execute
+// can deduplicate by message id and share the inbox write with the same
+// financial commit. Left nil for the HTTP path, which has no message
+// envelope.
+type InboxInfo struct {
+	ConsumerName string
+	MessageID    string
+}
 
 type ProcessWagerCommand struct {
 	TransactionID          string
@@ -20,14 +39,16 @@ type ProcessWagerCommand struct {
 	Kind                   domain.TransactionKind
 	Amount                 domain.Money
 	ReferenceTransactionID string
+	Inbox                  *InboxInfo
 }
 
 type ProcessWagerResult struct {
-	TransactionID string
-	Status        domain.TransactionStatus
-	Direction     domain.MovementDirection
-	BalanceAfter  domain.Money
-	FailureCode   *domain.FailureCode
+	TransactionID    string
+	Status           domain.TransactionStatus
+	Direction        domain.MovementDirection
+	BalanceAfter     domain.Money
+	FailureCode      *domain.FailureCode
+	AlreadyProcessed bool
 }
 
 type ProcessWagerService struct {
@@ -49,6 +70,36 @@ func (s *ProcessWagerService) Execute(ctx context.Context, cmd ProcessWagerComma
 
 	err := s.uow.WithinTransaction(ctx, func(ctx context.Context, repos repository.TransactionRepositories) error {
 		now := s.clock.Now()
+
+		var inboxHash string
+		if cmd.Inbox != nil {
+			inboxHash = computeWagerHash(cmd)
+			existing, err := repos.Inbox().FindByMessageID(ctx, cmd.Inbox.ConsumerName, cmd.Inbox.MessageID)
+			if err != nil && !errors.Is(err, repository.ErrNotFound) {
+				return err
+			}
+			if err == nil {
+				if existing.PayloadHash != inboxHash {
+					return ErrInboxHashConflict
+				}
+				result = &ProcessWagerResult{AlreadyProcessed: true}
+				return nil
+			}
+		}
+
+		markInbox := func() error {
+			if cmd.Inbox == nil {
+				return nil
+			}
+			return repos.Inbox().Create(ctx, &repository.InboxMessage{
+				ID:           s.ids.NewID(),
+				ConsumerName: cmd.Inbox.ConsumerName,
+				MessageID:    cmd.Inbox.MessageID,
+				PayloadHash:  inboxHash,
+				ReceivedAt:   now,
+				CompletedAt:  &now,
+			})
+		}
 
 		wallet, err := repos.Wallets().FindByIDForUpdate(ctx, cmd.WalletID)
 		if err != nil {
@@ -81,6 +132,9 @@ func (s *ProcessWagerService) Execute(ctx context.Context, cmd ProcessWagerComma
 			if err := repos.Wagers().Create(ctx, tx); err != nil {
 				return err
 			}
+			if err := markInbox(); err != nil {
+				return err
+			}
 			result = &ProcessWagerResult{TransactionID: tx.ID(), Status: tx.Status(), FailureCode: &code}
 			return nil
 		}
@@ -104,6 +158,10 @@ func (s *ProcessWagerService) Execute(ctx context.Context, cmd ProcessWagerComma
 			if err := repos.Ledger().Create(ctx, entry); err != nil {
 				return err
 			}
+		}
+
+		if err := markInbox(); err != nil {
+			return err
 		}
 
 		result = &ProcessWagerResult{
@@ -135,4 +193,41 @@ func applyWagerKind(tx *domain.WagerTransaction, wallet *domain.Wallet, referenc
 	default:
 		return domain.NewError(domain.FailureInvalidTransactionKind, "unsupported transaction kind")
 	}
+}
+
+// computeWagerHash hashes the business fields of a command so HTTP and SQS
+// produce identical results for the same operation. It intentionally
+// excludes transport metadata (idempotency key, transaction ID) and the
+// external transaction ID, which does not exist in the command yet.
+func computeWagerHash(cmd ProcessWagerCommand) string {
+	type wagerHashPayload struct {
+		ProviderID             string
+		PlayerID               string
+		WalletID               string
+		RoundID                string
+		GameID                 string
+		Kind                   string
+		AmountDecimal          string
+		Currency               string
+		ReferenceTransactionID string
+	}
+
+	payload := wagerHashPayload{
+		ProviderID:             cmd.ProviderID,
+		PlayerID:               cmd.PlayerID,
+		WalletID:               cmd.WalletID,
+		RoundID:                cmd.RoundID,
+		GameID:                 cmd.GameID,
+		Kind:                   string(cmd.Kind),
+		AmountDecimal:          cmd.Amount.Decimal(),
+		Currency:               string(cmd.Amount.Currency()),
+		ReferenceTransactionID: cmd.ReferenceTransactionID,
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		panic("compute wager hash: " + err.Error())
+	}
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
 }
