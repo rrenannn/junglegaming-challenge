@@ -41,6 +41,10 @@ func NewProcessWagerService(uow repository.UnitOfWork, clock port.Clock, ids por
 }
 
 func (s *ProcessWagerService) Execute(ctx context.Context, cmd ProcessWagerCommand) (*ProcessWagerResult, error) {
+	if cmd.TransactionID == "" {
+		cmd.TransactionID = s.ids.NewID()
+	}
+
 	var result *ProcessWagerResult
 
 	err := s.uow.WithinTransaction(ctx, func(ctx context.Context, repos repository.TransactionRepositories) error {

@@ -186,6 +186,25 @@ func TestProcessWagerService_BetThenWin(t *testing.T) {
 	}
 }
 
+func TestProcessWagerService_GeneratesTransactionIDWhenAbsent(t *testing.T) {
+	svc, pool := newTestService(t)
+	walletID := seedWallet(t, pool, "player-generated-id", "50.00")
+
+	cmd := betCommand(walletID, "player-generated-id", "20.00")
+	cmd.TransactionID = ""
+
+	result, err := svc.Execute(context.Background(), cmd)
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if result.TransactionID == "" {
+		t.Fatal("expected a generated transaction id, got empty string")
+	}
+	if _, err := uuid.Parse(result.TransactionID); err != nil {
+		t.Fatalf("generated transaction id %q is not a valid UUID: %v", result.TransactionID, err)
+	}
+}
+
 func TestProcessWagerService_RefundThenRollbackRejected(t *testing.T) {
 	svc, pool := newTestService(t)
 	walletID := seedWallet(t, pool, "player-4", "100.00")
