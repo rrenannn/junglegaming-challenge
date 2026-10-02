@@ -15,4 +15,5 @@ type LedgerCursor struct {
 type LedgerRepository interface {
 	Create(ctx context.Context, entry *domain.LedgerEntry) error
 	ListByWallet(ctx context.Context, walletID string, after *LedgerCursor, limit int) ([]*domain.LedgerEntry, error)
+	SumByWallet(ctx context.Context, walletID string, currency domain.Currency) (domain.Money, error)
 }

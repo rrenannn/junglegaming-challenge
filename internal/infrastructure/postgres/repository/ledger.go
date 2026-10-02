@@ -36,6 +36,18 @@ func (r *LedgerRepository) Create(ctx context.Context, entry *domain.LedgerEntry
 	return nil
 }
 
+func (r *LedgerRepository) SumByWallet(ctx context.Context, walletID string, currency domain.Currency) (domain.Money, error) {
+	var sumMinor int64
+	err := r.tx.QueryRow(ctx, `
+		SELECT COALESCE(SUM(CASE WHEN direction = 'CREDIT' THEN amount_minor ELSE -amount_minor END), 0)
+		FROM wallet_ledger_entries WHERE wallet_id = $1
+	`, walletID).Scan(&sumMinor)
+	if err != nil {
+		return domain.Money{}, fmt.Errorf("sum ledger entries: %w", err)
+	}
+	return domain.NewMoney(sumMinor, currency)
+}
+
 func (r *LedgerRepository) ListByWallet(ctx context.Context, walletID string, after *repository.LedgerCursor, limit int) ([]*domain.LedgerEntry, error) {
 	const columns = `id, wallet_id, transaction_id, direction, amount_minor, currency, balance_before_minor, balance_after_minor, created_at`
 
