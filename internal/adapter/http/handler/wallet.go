@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/rrenannn/junglegaming-challenge/internal/adapter/http/response"
@@ -15,10 +16,11 @@ import (
 type Wallet struct {
 	open *service.OpenWalletService
 	get  *service.GetWalletService
+	list *service.ListLedgerService
 }
 
-func NewWallet(open *service.OpenWalletService, get *service.GetWalletService) *Wallet {
-	return &Wallet{open: open, get: get}
+func NewWallet(open *service.OpenWalletService, get *service.GetWalletService, list *service.ListLedgerService) *Wallet {
+	return &Wallet{open: open, get: get, list: list}
 }
 
 type openWalletRequest struct {
@@ -79,6 +81,62 @@ func (h *Wallet) Get(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, http.StatusOK, toWalletResponse(wallet))
 }
 
+func (h *Wallet) Ledger(w http.ResponseWriter, r *http.Request) {
+	walletID := r.PathValue("walletId")
+
+	limit := 0
+	if raw := r.URL.Query().Get("limit"); raw != "" {
+		if parsed, err := strconv.Atoi(raw); err == nil {
+			limit = parsed
+		}
+	}
+
+	page, err := h.list.Execute(r.Context(), service.ListLedgerQuery{
+		WalletID: walletID,
+		Cursor:   r.URL.Query().Get("cursor"),
+		Limit:    limit,
+	})
+	if err != nil {
+		writeWalletError(w, err)
+		return
+	}
+
+	response.JSON(w, http.StatusOK, toLedgerPageResponse(page))
+}
+
+type ledgerEntryResponse struct {
+	ID            string       `json:"id"`
+	WalletID      string       `json:"walletId"`
+	TransactionID string       `json:"transactionId"`
+	Direction     string       `json:"direction"`
+	Amount        domain.Money `json:"amount"`
+	BalanceBefore domain.Money `json:"balanceBefore"`
+	BalanceAfter  domain.Money `json:"balanceAfter"`
+	CreatedAt     time.Time    `json:"createdAt"`
+}
+
+type ledgerPageResponse struct {
+	Entries    []ledgerEntryResponse `json:"entries"`
+	NextCursor string                `json:"nextCursor"`
+}
+
+func toLedgerPageResponse(page *service.LedgerPage) ledgerPageResponse {
+	entries := make([]ledgerEntryResponse, len(page.Entries))
+	for i, entry := range page.Entries {
+		entries[i] = ledgerEntryResponse{
+			ID:            entry.ID(),
+			WalletID:      entry.WalletID(),
+			TransactionID: entry.TransactionID(),
+			Direction:     string(entry.Direction()),
+			Amount:        entry.Amount(),
+			BalanceBefore: entry.BalanceBefore(),
+			BalanceAfter:  entry.BalanceAfter(),
+			CreatedAt:     entry.CreatedAt(),
+		}
+	}
+	return ledgerPageResponse{Entries: entries, NextCursor: page.NextCursor}
+}
+
 func writeWalletError(w http.ResponseWriter, err error) {
 	var domainErr *domain.Error
 	switch {
@@ -86,6 +144,8 @@ func writeWalletError(w http.ResponseWriter, err error) {
 		response.Error(w, http.StatusNotFound, "WALLET_NOT_FOUND", "wallet not found")
 	case errors.Is(err, repository.ErrAlreadyExists):
 		response.Error(w, http.StatusConflict, "WALLET_ALREADY_EXISTS", "wallet already exists for this player and currency")
+	case errors.Is(err, service.ErrInvalidCursor):
+		response.Error(w, http.StatusBadRequest, "INVALID_CURSOR", "invalid pagination cursor")
 	case errors.As(err, &domainErr):
 		response.Error(w, http.StatusBadRequest, string(domainErr.Code), domainErr.Message)
 	default:
