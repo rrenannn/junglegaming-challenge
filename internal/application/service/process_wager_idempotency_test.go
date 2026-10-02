@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/rrenannn/junglegaming-challenge/internal/application/repository"
+	"github.com/rrenannn/junglegaming-challenge/internal/domain"
 )
 
 func TestProcessWagerService_IdempotentReplayWithSameKeyAndContent(t *testing.T) {
@@ -62,6 +63,50 @@ func TestProcessWagerService_IdempotentReplayWithDifferentContentConflicts(t *te
 	_, err := svc.Execute(context.Background(), second)
 	if !errors.Is(err, repository.ErrIdempotencyKeyConflict) {
 		t.Fatalf("err = %v, want repository.ErrIdempotencyKeyConflict", err)
+	}
+}
+
+func TestProcessWagerService_ReplayReturnsOriginalSnapshotAfterLaterMovements(t *testing.T) {
+	svc, pool := newTestService(t)
+	walletID := seedWallet(t, pool, "player-idem-4", "100.00")
+
+	betCmd := betCommand(walletID, "player-idem-4", "30.00")
+	betCmd.IdempotencyKey = betCmd.ExternalTransactionID
+	betResult, err := svc.Execute(context.Background(), betCmd)
+	if err != nil {
+		t.Fatalf("bet Execute: %v", err)
+	}
+	if betResult.BalanceAfter.Decimal() != "70.00" {
+		t.Fatalf("bet balanceAfter = %s, want 70.00", betResult.BalanceAfter.Decimal())
+	}
+
+	winCmd := betCommand(walletID, "player-idem-4", "15.00")
+	winCmd.Kind = domain.KindWin
+	if _, err := svc.Execute(context.Background(), winCmd); err != nil {
+		t.Fatalf("win Execute: %v", err)
+	}
+	if balance := fetchWalletBalance(t, pool, walletID); balance != "85.00" {
+		t.Fatalf("balance after win = %s, want 85.00", balance)
+	}
+
+	replay, err := svc.Execute(context.Background(), betCmd)
+	if err != nil {
+		t.Fatalf("replay Execute: %v", err)
+	}
+	if !replay.AlreadyProcessed {
+		t.Fatal("resubmitting the original bet should be a replay")
+	}
+	if replay.TransactionID != betResult.TransactionID {
+		t.Fatalf("replay TransactionID = %s, want %s", replay.TransactionID, betResult.TransactionID)
+	}
+	if replay.BalanceAfter.Decimal() != "70.00" {
+		t.Fatalf("replay balanceAfter = %s, want the original snapshot 70.00, not the current 85.00", replay.BalanceAfter.Decimal())
+	}
+	if balance := fetchWalletBalance(t, pool, walletID); balance != "85.00" {
+		t.Fatalf("balance after replay = %s, want unchanged 85.00", balance)
+	}
+	if count := countWagerTransactions(t, pool, walletID); count != 2 {
+		t.Fatalf("wager transactions = %d, want 2 (bet + win, no extra row for the replay)", count)
 	}
 }
 
