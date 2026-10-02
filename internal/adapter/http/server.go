@@ -29,6 +29,7 @@ func NewServer(cfg config.Config, logger *slog.Logger, checks []port.HealthCheck
 	}
 	mux.Handle("POST /wallets", internalOnly(walletHandler.Open))
 	mux.Handle("GET /wallets/{walletId}", internalOnly(walletHandler.Get))
+	mux.Handle("GET /wallets/{walletId}/ledger", internalOnly(walletHandler.Ledger))
 
 	return &Server{
 		server: &http.Server{

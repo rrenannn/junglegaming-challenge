@@ -30,6 +30,7 @@ var Module = fx.Module(
 		service.NewProcessWagerService,
 		service.NewOpenWalletService,
 		service.NewGetWalletService,
+		service.NewListLedgerService,
 		handler.NewWallet,
 		fx.Annotate(
 			postgres.NewHealthCheck,
