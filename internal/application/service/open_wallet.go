@@ -77,6 +77,11 @@ func (s *OpenWalletService) Execute(ctx context.Context, cmd OpenWalletCommand) 
 			if err := repos.Ledger().Create(ctx, entry); err != nil {
 				return err
 			}
+
+			event := domain.NewWalletBalanceChangedEvent(s.ids.NewID(), wallet, tx.ID(), "", tx.ID(), now)
+			if err := repos.Outbox().Create(ctx, event); err != nil {
+				return err
+			}
 		}
 
 		result = wallet

@@ -55,6 +55,11 @@ func TestOpenWalletService_PositiveOpeningBalanceCreatesOpeningTransactionAndLed
 	if count := countLedgerEntries(t, pool, wallet.ID()); count != 1 {
 		t.Fatalf("ledger entries = %d, want 1", count)
 	}
+	types := outboxEventTypes(t, pool, wallet.ID())
+	want := []string{string(domain.EventWalletBalanceChanged)}
+	if len(types) != len(want) || types[0] != want[0] {
+		t.Fatalf("outbox event types = %v, want %v", types, want)
+	}
 }
 
 func TestOpenWalletService_ZeroOpeningBalanceCreatesNoTransactionOrLedger(t *testing.T) {
@@ -76,6 +81,9 @@ func TestOpenWalletService_ZeroOpeningBalanceCreatesNoTransactionOrLedger(t *tes
 	}
 	if count := countLedgerEntries(t, pool, wallet.ID()); count != 0 {
 		t.Fatalf("ledger entries = %d, want 0", count)
+	}
+	if types := outboxEventTypes(t, pool, wallet.ID()); len(types) != 0 {
+		t.Fatalf("outbox event types = %v, want none", types)
 	}
 }
 
