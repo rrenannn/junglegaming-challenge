@@ -1,0 +1,1 @@
+ALTER TABLE wager_transactions DROP COLUMN reference_external_transaction_id;
