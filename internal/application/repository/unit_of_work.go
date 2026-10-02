@@ -7,6 +7,7 @@ type TransactionRepositories interface {
 	Wagers() WagerTransactionRepository
 	Ledger() LedgerRepository
 	Inbox() InboxRepository
+	Outbox() OutboxRepository
 }
 
 type UnitOfWork interface {

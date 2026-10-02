@@ -66,7 +66,7 @@ func resetSchema(t *testing.T, pool *pgxpool.Pool) {
 	defer cancel()
 
 	_, err := pool.Exec(ctx, `
-		TRUNCATE TABLE wallet_ledger_entries, wager_transactions, wallets RESTART IDENTITY CASCADE
+		TRUNCATE TABLE wallet_ledger_entries, wager_transactions, wallets, inbox_messages, outbox_events RESTART IDENTITY CASCADE
 	`)
 	if err != nil {
 		t.Fatalf("reset schema: %v", err)
