@@ -44,125 +44,188 @@ const (
 )
 
 type WagerTransaction struct {
-	id           string
-	providerID   string
-	playerID     string
-	walletID     string
-	roundID      string
-	gameID       string
-	kind         TransactionKind
-	status       TransactionStatus
-	amount       Money
-	direction    MovementDirection
-	referenceID  *string
-	reversedBy   *string
-	failureCode  *FailureCode
-	balanceAfter *Money
-	createdAt    time.Time
-	updatedAt    time.Time
+	id                    string
+	providerID            string
+	playerID              string
+	walletID              string
+	roundID               string
+	gameID                string
+	kind                  TransactionKind
+	status                TransactionStatus
+	amount                Money
+	direction             MovementDirection
+	externalTransactionID string
+	idempotencyKey        string
+	payloadHash           string
+	referenceExternalID   *string
+	referenceID           *string
+	reversedBy            *string
+	failureCode           *FailureCode
+	balanceAfter          *Money
+	attempts              int
+	createdAt             time.Time
+	updatedAt             time.Time
 }
 
-func NewWagerTransaction(id, providerID, playerID, walletID, roundID, gameID string, kind TransactionKind, amount Money, now time.Time) (*WagerTransaction, error) {
-	if strings.TrimSpace(id) == "" {
+type NewWagerTransactionParams struct {
+	ID                             string
+	ProviderID                     string
+	PlayerID                       string
+	WalletID                       string
+	RoundID                        string
+	GameID                         string
+	Kind                           TransactionKind
+	Amount                         Money
+	ExternalTransactionID          string
+	IdempotencyKey                 string
+	PayloadHash                    string
+	ReferenceExternalTransactionID string
+}
+
+func NewWagerTransaction(params NewWagerTransactionParams, now time.Time) (*WagerTransaction, error) {
+	if strings.TrimSpace(params.ID) == "" {
 		return nil, NewError(FailureInvalidState, "transaction id is required")
 	}
-	if strings.TrimSpace(playerID) == "" {
+	if strings.TrimSpace(params.PlayerID) == "" {
 		return nil, NewError(FailureInvalidState, "player id is required")
 	}
-	if strings.TrimSpace(walletID) == "" {
+	if strings.TrimSpace(params.WalletID) == "" {
 		return nil, NewError(FailureInvalidState, "wallet id is required")
 	}
 
-	if kind == KindOpening {
-		if providerID != "" || roundID != "" || gameID != "" {
+	if params.Kind == KindOpening {
+		if params.ProviderID != "" || params.RoundID != "" || params.GameID != "" {
 			return nil, NewError(FailureInvalidTransactionKind, "opening transactions must not carry provider, round or game metadata")
 		}
 	} else {
-		if strings.TrimSpace(providerID) == "" || strings.TrimSpace(roundID) == "" || strings.TrimSpace(gameID) == "" {
+		if strings.TrimSpace(params.ProviderID) == "" || strings.TrimSpace(params.RoundID) == "" || strings.TrimSpace(params.GameID) == "" {
 			return nil, NewError(FailureInvalidTransactionKind, "external transactions require provider, round and game")
+		}
+		if strings.TrimSpace(params.ExternalTransactionID) == "" {
+			return nil, NewError(FailureInvalidTransactionKind, "external transactions require an external transaction id")
 		}
 	}
 
-	switch kind {
+	if params.Kind == KindRefund || params.Kind == KindRollback {
+		if strings.TrimSpace(params.ReferenceExternalTransactionID) == "" {
+			return nil, NewError(FailureInvalidTransactionKind, "refund and rollback require a reference external transaction id")
+		}
+	}
+
+	switch params.Kind {
 	case KindLoss:
-		if !amount.IsZero() {
+		if !params.Amount.IsZero() {
 			return nil, NewError(FailureInvalidAmount, "loss amount must be exactly zero")
 		}
 	case KindBet, KindWin, KindRefund, KindRollback, KindOpening:
-		if !amount.IsPositive() {
+		if !params.Amount.IsPositive() {
 			return nil, NewError(FailureInvalidAmount, "amount must be positive")
 		}
 	default:
 		return nil, NewError(FailureInvalidTransactionKind, "unknown transaction kind")
 	}
 
+	var referenceExternalID *string
+	if params.ReferenceExternalTransactionID != "" {
+		ref := params.ReferenceExternalTransactionID
+		referenceExternalID = &ref
+	}
+
 	return &WagerTransaction{
-		id:         id,
-		providerID: providerID,
-		playerID:   playerID,
-		walletID:   walletID,
-		roundID:    roundID,
-		gameID:     gameID,
-		kind:       kind,
-		amount:     amount,
-		status:     StatusPending,
-		direction:  DirectionNone,
-		createdAt:  now,
-		updatedAt:  now,
+		id:                    params.ID,
+		providerID:            params.ProviderID,
+		playerID:              params.PlayerID,
+		walletID:              params.WalletID,
+		roundID:               params.RoundID,
+		gameID:                params.GameID,
+		kind:                  params.Kind,
+		amount:                params.Amount,
+		externalTransactionID: params.ExternalTransactionID,
+		idempotencyKey:        params.IdempotencyKey,
+		payloadHash:           params.PayloadHash,
+		referenceExternalID:   referenceExternalID,
+		status:                StatusPending,
+		direction:             DirectionNone,
+		createdAt:             now,
+		updatedAt:             now,
 	}, nil
 }
 
-func RehydrateWagerTransaction(
-	id, providerID, playerID, walletID, roundID, gameID string,
-	kind TransactionKind,
-	status TransactionStatus,
-	amount Money,
-	direction MovementDirection,
-	referenceID, reversedBy *string,
-	failureCode *FailureCode,
-	balanceAfter *Money,
-	createdAt, updatedAt time.Time,
-) (*WagerTransaction, error) {
-	if strings.TrimSpace(id) == "" {
+type RehydrateWagerTransactionParams struct {
+	ID                             string
+	ProviderID                     string
+	PlayerID                       string
+	WalletID                       string
+	RoundID                        string
+	GameID                         string
+	Kind                           TransactionKind
+	Status                         TransactionStatus
+	Amount                         Money
+	Direction                      MovementDirection
+	ExternalTransactionID          string
+	IdempotencyKey                 string
+	PayloadHash                    string
+	ReferenceTransactionID         *string
+	ReferenceExternalTransactionID *string
+	ReversedBy                     *string
+	FailureCode                    *FailureCode
+	BalanceAfter                   *Money
+	Attempts                       int
+	CreatedAt                      time.Time
+	UpdatedAt                      time.Time
+}
+
+func RehydrateWagerTransaction(params RehydrateWagerTransactionParams) (*WagerTransaction, error) {
+	if strings.TrimSpace(params.ID) == "" {
 		return nil, NewError(FailureInvalidState, "transaction id is required")
 	}
 
 	return &WagerTransaction{
-		id:           id,
-		providerID:   providerID,
-		playerID:     playerID,
-		walletID:     walletID,
-		roundID:      roundID,
-		gameID:       gameID,
-		kind:         kind,
-		status:       status,
-		amount:       amount,
-		direction:    direction,
-		referenceID:  referenceID,
-		reversedBy:   reversedBy,
-		failureCode:  failureCode,
-		balanceAfter: balanceAfter,
-		createdAt:    createdAt,
-		updatedAt:    updatedAt,
+		id:                    params.ID,
+		providerID:            params.ProviderID,
+		playerID:              params.PlayerID,
+		walletID:              params.WalletID,
+		roundID:               params.RoundID,
+		gameID:                params.GameID,
+		kind:                  params.Kind,
+		status:                params.Status,
+		amount:                params.Amount,
+		direction:             params.Direction,
+		externalTransactionID: params.ExternalTransactionID,
+		idempotencyKey:        params.IdempotencyKey,
+		payloadHash:           params.PayloadHash,
+		referenceExternalID:   params.ReferenceExternalTransactionID,
+		referenceID:           params.ReferenceTransactionID,
+		reversedBy:            params.ReversedBy,
+		failureCode:           params.FailureCode,
+		balanceAfter:          params.BalanceAfter,
+		attempts:              params.Attempts,
+		createdAt:             params.CreatedAt,
+		updatedAt:             params.UpdatedAt,
 	}, nil
 }
 
-func (tx *WagerTransaction) ID() string                      { return tx.id }
-func (tx *WagerTransaction) ProviderID() string              { return tx.providerID }
-func (tx *WagerTransaction) PlayerID() string                { return tx.playerID }
-func (tx *WagerTransaction) WalletID() string                { return tx.walletID }
-func (tx *WagerTransaction) RoundID() string                 { return tx.roundID }
-func (tx *WagerTransaction) GameID() string                  { return tx.gameID }
-func (tx *WagerTransaction) Kind() TransactionKind           { return tx.kind }
-func (tx *WagerTransaction) Status() TransactionStatus       { return tx.status }
-func (tx *WagerTransaction) Amount() Money                   { return tx.amount }
-func (tx *WagerTransaction) Direction() MovementDirection    { return tx.direction }
-func (tx *WagerTransaction) ReferenceTransactionID() *string { return tx.referenceID }
-func (tx *WagerTransaction) ReversedBy() *string             { return tx.reversedBy }
-func (tx *WagerTransaction) FailureCode() *FailureCode       { return tx.failureCode }
-func (tx *WagerTransaction) BalanceAfter() *Money            { return tx.balanceAfter }
-func (tx *WagerTransaction) CreatedAt() time.Time            { return tx.createdAt }
-func (tx *WagerTransaction) UpdatedAt() time.Time            { return tx.updatedAt }
+func (tx *WagerTransaction) ID() string                              { return tx.id }
+func (tx *WagerTransaction) ProviderID() string                      { return tx.providerID }
+func (tx *WagerTransaction) PlayerID() string                        { return tx.playerID }
+func (tx *WagerTransaction) WalletID() string                        { return tx.walletID }
+func (tx *WagerTransaction) RoundID() string                         { return tx.roundID }
+func (tx *WagerTransaction) GameID() string                          { return tx.gameID }
+func (tx *WagerTransaction) Kind() TransactionKind                   { return tx.kind }
+func (tx *WagerTransaction) Status() TransactionStatus               { return tx.status }
+func (tx *WagerTransaction) Amount() Money                           { return tx.amount }
+func (tx *WagerTransaction) Direction() MovementDirection            { return tx.direction }
+func (tx *WagerTransaction) ExternalTransactionID() string           { return tx.externalTransactionID }
+func (tx *WagerTransaction) IdempotencyKey() string                  { return tx.idempotencyKey }
+func (tx *WagerTransaction) PayloadHash() string                     { return tx.payloadHash }
+func (tx *WagerTransaction) ReferenceExternalTransactionID() *string { return tx.referenceExternalID }
+func (tx *WagerTransaction) ReferenceTransactionID() *string         { return tx.referenceID }
+func (tx *WagerTransaction) ReversedBy() *string                     { return tx.reversedBy }
+func (tx *WagerTransaction) FailureCode() *FailureCode               { return tx.failureCode }
+func (tx *WagerTransaction) BalanceAfter() *Money                    { return tx.balanceAfter }
+func (tx *WagerTransaction) Attempts() int                           { return tx.attempts }
+func (tx *WagerTransaction) CreatedAt() time.Time                    { return tx.createdAt }
+func (tx *WagerTransaction) UpdatedAt() time.Time                    { return tx.updatedAt }
 
 func (tx *WagerTransaction) requireKind(kind TransactionKind) error {
 	if tx.kind != kind {

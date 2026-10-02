@@ -25,7 +25,15 @@ func newWalletWithBalance(t *testing.T, decimal string) *Wallet {
 
 func newExternalTx(t *testing.T, id string, kind TransactionKind, amount string) *WagerTransaction {
 	t.Helper()
-	tx, err := NewWagerTransaction(id, "provider-a", "player-1", "wallet-1", "round-1", "game-1", kind, money(t, amount), time.Now())
+	params := NewWagerTransactionParams{
+		ID: id, ProviderID: "provider-a", PlayerID: "player-1", WalletID: "wallet-1",
+		RoundID: "round-1", GameID: "game-1", Kind: kind, Amount: money(t, amount),
+		ExternalTransactionID: "ext-" + id, IdempotencyKey: "ext-" + id,
+	}
+	if kind == KindRefund || kind == KindRollback {
+		params.ReferenceExternalTransactionID = "ext-ref-" + id
+	}
+	tx, err := NewWagerTransaction(params, time.Now())
 	if err != nil {
 		t.Fatalf("NewWagerTransaction(%s): %v", kind, err)
 	}
@@ -34,7 +42,10 @@ func newExternalTx(t *testing.T, id string, kind TransactionKind, amount string)
 
 func TestNewWagerTransaction_OpeningRejectsExternalMetadata(t *testing.T) {
 	zero, _ := ZeroMoney(BRL)
-	_, err := NewWagerTransaction("tx-1", "provider-a", "player-1", "wallet-1", "", "", KindOpening, zero, time.Now())
+	_, err := NewWagerTransaction(NewWagerTransactionParams{
+		ID: "tx-1", ProviderID: "provider-a", PlayerID: "player-1", WalletID: "wallet-1",
+		Kind: KindOpening, Amount: zero,
+	}, time.Now())
 	if !HasFailureCode(err, FailureInvalidTransactionKind) {
 		t.Fatalf("got %v, want INVALID_TRANSACTION_KIND", err)
 	}
@@ -42,7 +53,22 @@ func TestNewWagerTransaction_OpeningRejectsExternalMetadata(t *testing.T) {
 
 func TestNewWagerTransaction_ExternalRequiresMetadata(t *testing.T) {
 	amount := money(t, "10.00")
-	_, err := NewWagerTransaction("tx-1", "", "player-1", "wallet-1", "round-1", "game-1", KindBet, amount, time.Now())
+	_, err := NewWagerTransaction(NewWagerTransactionParams{
+		ID: "tx-1", ProviderID: "", PlayerID: "player-1", WalletID: "wallet-1",
+		RoundID: "round-1", GameID: "game-1", Kind: KindBet, Amount: amount,
+		ExternalTransactionID: "ext-1",
+	}, time.Now())
+	if !HasFailureCode(err, FailureInvalidTransactionKind) {
+		t.Fatalf("got %v, want INVALID_TRANSACTION_KIND", err)
+	}
+}
+
+func TestNewWagerTransaction_ExternalRequiresExternalTransactionID(t *testing.T) {
+	amount := money(t, "10.00")
+	_, err := NewWagerTransaction(NewWagerTransactionParams{
+		ID: "tx-1", ProviderID: "provider-a", PlayerID: "player-1", WalletID: "wallet-1",
+		RoundID: "round-1", GameID: "game-1", Kind: KindBet, Amount: amount,
+	}, time.Now())
 	if !HasFailureCode(err, FailureInvalidTransactionKind) {
 		t.Fatalf("got %v, want INVALID_TRANSACTION_KIND", err)
 	}
@@ -70,7 +96,15 @@ func TestNewWagerTransaction_KindAmountRules(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		_, err := NewWagerTransaction("tx-1", "provider-a", "player-1", "wallet-1", "round-1", "game-1", tc.kind, tc.amount, time.Now())
+		params := NewWagerTransactionParams{
+			ID: "tx-1", ProviderID: "provider-a", PlayerID: "player-1", WalletID: "wallet-1",
+			RoundID: "round-1", GameID: "game-1", Kind: tc.kind, Amount: tc.amount,
+			ExternalTransactionID: "ext-1",
+		}
+		if tc.kind == KindRefund || tc.kind == KindRollback {
+			params.ReferenceExternalTransactionID = "ext-ref-1"
+		}
+		_, err := NewWagerTransaction(params, time.Now())
 		if tc.wantErr && err == nil {
 			t.Errorf("%s with amount %s: expected error, got none", tc.kind, tc.amount.Decimal())
 		}
@@ -88,7 +122,9 @@ func TestProcessOpening(t *testing.T) {
 		t.Fatalf("NewWallet: %v", err)
 	}
 
-	tx, err := NewWagerTransaction("tx-1", "", "player-1", "wallet-1", "", "", KindOpening, balance, now)
+	tx, err := NewWagerTransaction(NewWagerTransactionParams{
+		ID: "tx-1", PlayerID: "player-1", WalletID: "wallet-1", Kind: KindOpening, Amount: balance,
+	}, now)
 	if err != nil {
 		t.Fatalf("NewWagerTransaction: %v", err)
 	}
@@ -338,7 +374,11 @@ func TestProcessRollback_InsufficientFundsMapsToReversalCode(t *testing.T) {
 
 func TestProcessRollback_RejectsFieldMismatch(t *testing.T) {
 	wallet := newWalletWithBalance(t, "100.00")
-	bet, err := NewWagerTransaction("tx-bet", "provider-a", "player-1", "wallet-1", "round-1", "game-1", KindBet, money(t, "80.00"), time.Now())
+	bet, err := NewWagerTransaction(NewWagerTransactionParams{
+		ID: "tx-bet", ProviderID: "provider-a", PlayerID: "player-1", WalletID: "wallet-1",
+		RoundID: "round-1", GameID: "game-1", Kind: KindBet, Amount: money(t, "80.00"),
+		ExternalTransactionID: "ext-bet",
+	}, time.Now())
 	if err != nil {
 		t.Fatalf("NewWagerTransaction: %v", err)
 	}
@@ -346,7 +386,11 @@ func TestProcessRollback_RejectsFieldMismatch(t *testing.T) {
 		t.Fatalf("ProcessBet: %v", err)
 	}
 
-	rollback, err := NewWagerTransaction("tx-rollback", "provider-b", "player-1", "wallet-1", "round-1", "game-1", KindRollback, money(t, "80.00"), time.Now())
+	rollback, err := NewWagerTransaction(NewWagerTransactionParams{
+		ID: "tx-rollback", ProviderID: "provider-b", PlayerID: "player-1", WalletID: "wallet-1",
+		RoundID: "round-1", GameID: "game-1", Kind: KindRollback, Amount: money(t, "80.00"),
+		ExternalTransactionID: "ext-rollback", ReferenceExternalTransactionID: "ext-bet",
+	}, time.Now())
 	if err != nil {
 		t.Fatalf("NewWagerTransaction: %v", err)
 	}
@@ -405,12 +449,12 @@ func TestTerminalStatus_RejectsFurtherTransitions(t *testing.T) {
 }
 
 func TestRehydrateWagerTransaction_NoValidation(t *testing.T) {
-	tx, err := RehydrateWagerTransaction(
-		"tx-1", "provider-a", "player-1", "wallet-1", "round-1", "game-1",
-		KindBet, StatusProcessed, money(t, "10.00"), DirectionDebit,
-		nil, nil, nil, nil,
-		time.Now(), time.Now(),
-	)
+	tx, err := RehydrateWagerTransaction(RehydrateWagerTransactionParams{
+		ID: "tx-1", ProviderID: "provider-a", PlayerID: "player-1", WalletID: "wallet-1",
+		RoundID: "round-1", GameID: "game-1",
+		Kind: KindBet, Status: StatusProcessed, Amount: money(t, "10.00"), Direction: DirectionDebit,
+		CreatedAt: time.Now(), UpdatedAt: time.Now(),
+	})
 	if err != nil {
 		t.Fatalf("RehydrateWagerTransaction: %v", err)
 	}
