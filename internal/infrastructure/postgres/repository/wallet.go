@@ -7,9 +7,12 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/rrenannn/junglegaming-challenge/internal/application/repository"
 	"github.com/rrenannn/junglegaming-challenge/internal/domain"
 )
+
+const walletPlayerCurrencyUniqueConstraint = "wallets_player_currency_unique"
 
 type WalletRepository struct {
 	tx pgx.Tx
@@ -28,6 +31,10 @@ func (r *WalletRepository) Create(ctx context.Context, wallet *domain.Wallet) er
 		wallet.Version(), wallet.CreatedAt(), wallet.UpdatedAt(),
 	)
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == walletPlayerCurrencyUniqueConstraint {
+			return repository.ErrAlreadyExists
+		}
 		return fmt.Errorf("create wallet: %w", err)
 	}
 	return nil
@@ -52,7 +59,18 @@ func (r *WalletRepository) FindByIDForUpdate(ctx context.Context, id string) (*d
 		SELECT id, player_id, currency, balance_minor, version, created_at, updated_at
 		FROM wallets WHERE id = $1 FOR UPDATE
 	`, id)
+	return scanWallet(row)
+}
 
+func (r *WalletRepository) FindByID(ctx context.Context, id string) (*domain.Wallet, error) {
+	row := r.tx.QueryRow(ctx, `
+		SELECT id, player_id, currency, balance_minor, version, created_at, updated_at
+		FROM wallets WHERE id = $1
+	`, id)
+	return scanWallet(row)
+}
+
+func scanWallet(row pgx.Row) (*domain.Wallet, error) {
 	var (
 		walletID, playerID, currency string
 		balanceMinor, version        int64
@@ -62,7 +80,7 @@ func (r *WalletRepository) FindByIDForUpdate(ctx context.Context, id string) (*d
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, repository.ErrNotFound
 		}
-		return nil, fmt.Errorf("find wallet for update: %w", err)
+		return nil, fmt.Errorf("scan wallet: %w", err)
 	}
 
 	balance, err := domain.NewMoney(balanceMinor, domain.Currency(currency))

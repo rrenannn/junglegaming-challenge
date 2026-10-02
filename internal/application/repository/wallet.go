@@ -9,5 +9,6 @@ import (
 type WalletRepository interface {
 	Create(ctx context.Context, wallet *domain.Wallet) error
 	Update(ctx context.Context, wallet *domain.Wallet) error
+	FindByID(ctx context.Context, id string) (*domain.Wallet, error)
 	FindByIDForUpdate(ctx context.Context, id string) (*domain.Wallet, error)
 }
