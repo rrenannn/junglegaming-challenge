@@ -1,7 +1,7 @@
 GO_IMAGE ?= golang:1.27.1
 GO_RUN = docker run --rm -v $(CURDIR):/workspace -w /workspace $(GO_IMAGE)
 
-.PHONY: up down logs build tidy fmt test test-race vet check
+.PHONY: up down logs build tidy fmt test test-race vet check migrate-up migrate-down
 
 up:
 	docker compose up --build
@@ -31,3 +31,9 @@ vet:
 	$(GO_RUN) go vet ./...
 
 check: fmt test-race vet
+
+migrate-up:
+	go run ./cmd/migrate up
+
+migrate-down:
+	go run ./cmd/migrate down
