@@ -41,13 +41,13 @@ migrate-down:
 KEYCLOAK_TOKEN_URL ?= http://localhost:$(or $(KEYCLOAK_PORT),8081)/realms/jungle-gaming/protocol/openid-connect/token
 
 token-provider-a:
-	curl -s -X POST $(KEYCLOAK_TOKEN_URL) \
+	@curl -s -X POST $(KEYCLOAK_TOKEN_URL) \
 	  -d grant_type=client_credentials -d client_id=provider-a -d client_secret=provider-a-local-secret | jq -r .access_token
 
 token-provider-b:
-	curl -s -X POST $(KEYCLOAK_TOKEN_URL) \
+	@curl -s -X POST $(KEYCLOAK_TOKEN_URL) \
 	  -d grant_type=client_credentials -d client_id=provider-b -d client_secret=provider-b-local-secret | jq -r .access_token
 
 token-internal:
-	curl -s -X POST $(KEYCLOAK_TOKEN_URL) \
+	@curl -s -X POST $(KEYCLOAK_TOKEN_URL) \
 	  -d grant_type=client_credentials -d client_id=wallet-service -d client_secret=wallet-service-local-secret | jq -r .access_token
