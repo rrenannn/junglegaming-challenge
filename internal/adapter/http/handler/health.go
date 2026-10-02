@@ -25,18 +25,22 @@ func (h *Health) Live(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (h *Health) Ready(w http.ResponseWriter, request *http.Request) {
-	ctx, cancel := context.WithTimeout(request.Context(), h.timeout)
-	defer cancel()
-
 	result := healthResponse{Status: "ready", Checks: make(map[string]string, len(h.checks))}
 	status := http.StatusOK
 
 	for _, check := range h.checks {
-		if err := check.Check(ctx); err != nil {
+		// Each check gets its own fresh budget. A single context shared
+		// across the loop would let one slow/unavailable dependency eat the
+		// whole timeout and make later, perfectly healthy dependencies
+		// report unavailable too, for the wrong reason.
+		ctx, cancel := context.WithTimeout(request.Context(), h.timeout)
+		err := check.Check(ctx)
+		cancel()
+		if err != nil {
 			status = http.StatusServiceUnavailable
 			result.Status = "not_ready"
 			result.Checks[check.Name()] = "unavailable"
-			h.logger.WarnContext(ctx, "readiness check failed", "dependency", check.Name(), "error", err)
+			h.logger.WarnContext(request.Context(), "readiness check failed", "dependency", check.Name(), "error", err)
 			continue
 		}
 		result.Checks[check.Name()] = "available"
