@@ -29,6 +29,7 @@ func (u *UnitOfWork) WithinTransaction(ctx context.Context, fn func(context.Cont
 		wallets: pgrepository.NewWalletRepository(tx),
 		wagers:  pgrepository.NewWagerTransactionRepository(tx),
 		ledger:  pgrepository.NewLedgerRepository(tx),
+		inbox:   pgrepository.NewInboxRepository(tx),
 	}
 
 	if err := fn(ctx, repos); err != nil {
@@ -48,6 +49,7 @@ type transactionRepositories struct {
 	wallets *pgrepository.WalletRepository
 	wagers  *pgrepository.WagerTransactionRepository
 	ledger  *pgrepository.LedgerRepository
+	inbox   *pgrepository.InboxRepository
 }
 
 func (r *transactionRepositories) Wallets() apprepository.WalletRepository {
@@ -60,4 +62,8 @@ func (r *transactionRepositories) Wagers() apprepository.WagerTransactionReposit
 
 func (r *transactionRepositories) Ledger() apprepository.LedgerRepository {
 	return r.ledger
+}
+
+func (r *transactionRepositories) Inbox() apprepository.InboxRepository {
+	return r.inbox
 }

@@ -6,6 +6,7 @@ type TransactionRepositories interface {
 	Wallets() WalletRepository
 	Wagers() WagerTransactionRepository
 	Ledger() LedgerRepository
+	Inbox() InboxRepository
 }
 
 type UnitOfWork interface {
