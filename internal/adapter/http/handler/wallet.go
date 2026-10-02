@@ -62,7 +62,7 @@ func (h *Wallet) Open(w http.ResponseWriter, r *http.Request) {
 		OpeningBalance: req.OpeningBalance,
 	})
 	if err != nil {
-		writeWalletError(w, err)
+		writeServiceError(w, err, "WALLET_NOT_FOUND", "wallet not found")
 		return
 	}
 
@@ -74,7 +74,7 @@ func (h *Wallet) Get(w http.ResponseWriter, r *http.Request) {
 
 	wallet, err := h.get.Execute(r.Context(), walletID)
 	if err != nil {
-		writeWalletError(w, err)
+		writeServiceError(w, err, "WALLET_NOT_FOUND", "wallet not found")
 		return
 	}
 
@@ -97,7 +97,7 @@ func (h *Wallet) Ledger(w http.ResponseWriter, r *http.Request) {
 		Limit:    limit,
 	})
 	if err != nil {
-		writeWalletError(w, err)
+		writeServiceError(w, err, "WALLET_NOT_FOUND", "wallet not found")
 		return
 	}
 
@@ -137,11 +137,11 @@ func toLedgerPageResponse(page *service.LedgerPage) ledgerPageResponse {
 	return ledgerPageResponse{Entries: entries, NextCursor: page.NextCursor}
 }
 
-func writeWalletError(w http.ResponseWriter, err error) {
+func writeServiceError(w http.ResponseWriter, err error, notFoundCode, notFoundMessage string) {
 	var domainErr *domain.Error
 	switch {
 	case errors.Is(err, repository.ErrNotFound):
-		response.Error(w, http.StatusNotFound, "WALLET_NOT_FOUND", "wallet not found")
+		response.Error(w, http.StatusNotFound, notFoundCode, notFoundMessage)
 	case errors.Is(err, repository.ErrAlreadyExists):
 		response.Error(w, http.StatusConflict, "WALLET_ALREADY_EXISTS", "wallet already exists for this player and currency")
 	case errors.Is(err, service.ErrInvalidCursor):
