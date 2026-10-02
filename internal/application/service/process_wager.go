@@ -132,6 +132,10 @@ func (s *ProcessWagerService) Execute(ctx context.Context, cmd ProcessWagerComma
 			if err := repos.Wagers().Create(ctx, tx); err != nil {
 				return err
 			}
+			rejectedEvent := domain.NewWagerTransactionRejectedEvent(s.ids.NewID(), tx, "", "", now)
+			if err := repos.Outbox().Create(ctx, rejectedEvent); err != nil {
+				return err
+			}
 			if err := markInbox(); err != nil {
 				return err
 			}
@@ -156,6 +160,17 @@ func (s *ProcessWagerService) Execute(ctx context.Context, cmd ProcessWagerComma
 				return err
 			}
 			if err := repos.Ledger().Create(ctx, entry); err != nil {
+				return err
+			}
+		}
+
+		processedEvent := domain.NewWagerTransactionProcessedEvent(s.ids.NewID(), tx, "", "", now)
+		if err := repos.Outbox().Create(ctx, processedEvent); err != nil {
+			return err
+		}
+		if tx.Direction() != domain.DirectionNone {
+			balanceChangedEvent := domain.NewWalletBalanceChangedEvent(s.ids.NewID(), wallet, tx.ID(), "", tx.ID(), now)
+			if err := repos.Outbox().Create(ctx, balanceChangedEvent); err != nil {
 				return err
 			}
 		}
