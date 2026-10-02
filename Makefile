@@ -1,7 +1,7 @@
 GO_IMAGE ?= golang:1.27.1
 GO_RUN = docker run --rm -v $(CURDIR):/workspace -w /workspace $(GO_IMAGE)
 
-.PHONY: up down logs build tidy fmt test test-race vet check migrate-up migrate-down token-provider-a token-provider-b token-internal
+.PHONY: up down logs build tidy fmt test test-race vet check migrate-up migrate-down token-provider-a token-provider-b token-internal scale-up scale-down
 
 up:
 	docker compose up --build
@@ -51,3 +51,14 @@ token-provider-b:
 token-internal:
 	@curl -s -X POST $(KEYCLOAK_TOKEN_URL) \
 	  -d grant_type=client_credentials -d client_id=wallet-service -d client_secret=wallet-service-local-secret | jq -r .access_token
+
+# Runs 3 independent app replicas against the same Postgres/SQS/Keycloak,
+# proving the SQS consumer, outbox publisher and pending-reference worker
+# are all safe under real multi-instance concurrency (not just within one
+# process). compose.yaml's fixed host port (8080:8080) can't be scaled, so
+# this overrides it with an ephemeral per-replica port.
+scale-up:
+	docker compose -f compose.yaml -f compose.scale.yaml up -d --build --scale app=3
+
+scale-down:
+	docker compose -f compose.yaml -f compose.scale.yaml down

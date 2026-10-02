@@ -1,0 +1,6 @@
+name: jungle-gaming
+
+services:
+  app:
+    ports: !override
+      - "8080"
