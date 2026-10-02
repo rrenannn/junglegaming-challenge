@@ -10,6 +10,7 @@ import (
 	httpadapter "github.com/rrenannn/junglegaming-challenge/internal/adapter/http"
 	sqsadapter "github.com/rrenannn/junglegaming-challenge/internal/adapter/sqs"
 	"github.com/rrenannn/junglegaming-challenge/internal/adapter/sqs/worker"
+	referenceworker "github.com/rrenannn/junglegaming-challenge/internal/adapter/worker"
 	"github.com/rrenannn/junglegaming-challenge/internal/application/port"
 	"github.com/rrenannn/junglegaming-challenge/internal/infrastructure/config"
 	"go.uber.org/fx"
@@ -18,14 +19,15 @@ import (
 type lifecycleDependencies struct {
 	fx.In
 
-	Lifecycle fx.Lifecycle
-	Config    config.Config
-	Logger    *slog.Logger
-	Pool      *pgxpool.Pool
-	Server    *httpadapter.Server
-	Consumer  *sqsadapter.Consumer
-	Publisher *worker.OutboxPublisher
-	Checks    []port.HealthCheck `group:"readiness"`
+	Lifecycle       fx.Lifecycle
+	Config          config.Config
+	Logger          *slog.Logger
+	Pool            *pgxpool.Pool
+	Server          *httpadapter.Server
+	Consumer        *sqsadapter.Consumer
+	Publisher       *worker.OutboxPublisher
+	ReferenceWorker *referenceworker.PendingReferenceWorker
+	Checks          []port.HealthCheck `group:"readiness"`
 }
 
 func registerLifecycle(dependencies lifecycleDependencies) {
@@ -48,6 +50,9 @@ func registerLifecycle(dependencies lifecycleDependencies) {
 			if err := dependencies.Publisher.Start(ctx); err != nil {
 				return fmt.Errorf("start outbox publisher: %w", err)
 			}
+			if err := dependencies.ReferenceWorker.Start(ctx); err != nil {
+				return fmt.Errorf("start pending reference worker: %w", err)
+			}
 			dependencies.Logger.Info("application started")
 			return nil
 		},
@@ -55,13 +60,14 @@ func registerLifecycle(dependencies lifecycleDependencies) {
 			shutdownCtx, cancel := context.WithTimeout(ctx, dependencies.Config.HTTP.ShutdownTimeout)
 			defer cancel()
 
+			referenceWorkerErr := dependencies.ReferenceWorker.Shutdown(shutdownCtx)
 			publisherErr := dependencies.Publisher.Shutdown(shutdownCtx)
 			consumerErr := dependencies.Consumer.Shutdown(shutdownCtx)
 			serverErr := dependencies.Server.Shutdown(shutdownCtx)
 			dependencies.Pool.Close()
 			dependencies.Logger.Info("application stopped")
 
-			if err := errors.Join(publisherErr, consumerErr, serverErr); err != nil {
+			if err := errors.Join(referenceWorkerErr, publisherErr, consumerErr, serverErr); err != nil {
 				return fmt.Errorf("shutdown: %w", err)
 			}
 			return nil
