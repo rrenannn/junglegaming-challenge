@@ -9,5 +9,6 @@ import (
 type WagerTransactionRepository interface {
 	Create(ctx context.Context, tx *domain.WagerTransaction) error
 	Update(ctx context.Context, tx *domain.WagerTransaction) error
+	FindByID(ctx context.Context, id string) (*domain.WagerTransaction, error)
 	FindByIDForUpdate(ctx context.Context, id string) (*domain.WagerTransaction, error)
 }

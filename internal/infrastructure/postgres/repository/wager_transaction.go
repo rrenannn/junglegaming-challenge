@@ -81,7 +81,21 @@ func (r *WagerTransactionRepository) FindByIDForUpdate(ctx context.Context, id s
 			created_at, updated_at
 		FROM wager_transactions WHERE id = $1 FOR UPDATE
 	`, id)
+	return scanWagerTransaction(row)
+}
 
+func (r *WagerTransactionRepository) FindByID(ctx context.Context, id string) (*domain.WagerTransaction, error) {
+	row := r.tx.QueryRow(ctx, `
+		SELECT id, wallet_id, provider_id, player_id, round_id, game_id,
+			kind, status, direction, amount_minor, currency, balance_after_minor,
+			reference_transaction_id, reversed_by_transaction_id, failure_code,
+			created_at, updated_at
+		FROM wager_transactions WHERE id = $1
+	`, id)
+	return scanWagerTransaction(row)
+}
+
+func scanWagerTransaction(row pgx.Row) (*domain.WagerTransaction, error) {
 	var (
 		txID, walletID, playerID, kind, status, direction, currency string
 		providerID, roundID, gameID                                 sql.NullString
@@ -101,7 +115,7 @@ func (r *WagerTransactionRepository) FindByIDForUpdate(ctx context.Context, id s
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, repository.ErrNotFound
 		}
-		return nil, fmt.Errorf("find wager transaction for update: %w", err)
+		return nil, fmt.Errorf("scan wager transaction: %w", err)
 	}
 
 	amount, err := domain.NewMoney(amountMinor, domain.Currency(currency))
