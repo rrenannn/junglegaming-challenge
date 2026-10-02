@@ -29,6 +29,13 @@ services:
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
       KC_DB_USERNAME: keycloak_app
       KC_DB_PASSWORD: keycloak-local-password
+      # Pins the issuer/JWKS URLs embedded in tokens to the Docker network
+      # hostname regardless of which host/port a client used to reach this
+      # container (e.g. localhost:8081 from the host vs keycloak:8080 from
+      # other containers) — otherwise the token's iss claim reflects the
+      # request's Host header, which never matches app's internal OIDC_ISSUER.
+      KC_HOSTNAME: http://keycloak:8080
+      KC_HTTP_ENABLED: "true"
     ports:
       - "${KEYCLOAK_PORT:-8081}:8080"
     volumes:
